@@ -45,7 +45,7 @@ public class MongoBench {
     public static void main(String[] args) {
         final Options ops = new Options();
         ops.addOption("p", "port", true, "The ports to connect to");
-        ops.addOption("t", "target ", true, "The target host to connect to");
+        ops.addOption("t", "target ", true, "The target single host to connect to");
         ops.addOption("l", "phase", true, "The phase to execute [run|load]");
         ops.addOption("d", "duration", true, "Run the bench for this many seconds");
         ops.addOption("n", "num-thread", true, "The number of threads to run");
@@ -208,7 +208,7 @@ public class MongoBench {
         }
     }
 
-    private void doRunPhase(String host, int[] ports, int warmup, int duration, int numThreads, int reportingInterval, float targetRate, String latencyFilePrefix, int timeouts, boolean sslEnabled) {
+    private void doRunPhase(String[] host, int[] ports, int warmup, int duration, int numThreads, int reportingInterval, float targetRate, String latencyFilePrefix, int timeouts, boolean sslEnabled) {
         log.info("Starting {} threads for {} instances", numThreads, ports.length);
         final Map<RunThread, Thread> threads = new HashMap<RunThread, Thread>(numThreads);
         final List<List<Integer>> slices = createSlices(ports, numThreads);
@@ -328,27 +328,27 @@ public class MongoBench {
                 decimalFormat.format(maxWriteLatency / 1000000f), decimalFormat.format(avgWriteLatency / 1000000f));
     }
 
-    private List<List<Integer>> createSlices(int[] ports, int numThreads) {
-        final List<List<Integer>> slices = new ArrayList<List<Integer>>(numThreads);
+    private List<List<String>> createSlices(String[] host, int[] ports, int numThreads) {
+        final List<List<String>> slices = new ArrayList<List<String>>(numThreads);
         if (ports.length >= numThreads) {
-        for (int i = 0; i < numThreads; i++) {
-            slices.add(new ArrayList<Integer>());
-        }
-        for (int i = 0; i < ports.length; i++) {
-            int sliceIdx = i % numThreads;
-            slices.get(sliceIdx).add(ports[i]);
-        }
+        	for (int i = 0; i < numThreads; i++) {
+            	slices.add(new ArrayList<String>());
+        	}
+        	for (int i = 0; i < ports.length; i++) {
+            	int sliceIdx = i % numThreads;
+            	slices.get(sliceIdx).add(host[i] + Integer.toString(ports[i]));
+        	}
         } else {
             int portIndex = 0;
             for (int i = 0; i < numThreads; i++) {
-                final List<Integer> portsTmp;
+                final List<String> conTmp;
                 if (slices.size() <= i) {
-                    portsTmp = new ArrayList<>();
-                    slices.add(i, portsTmp);
+                    conTmp = new ArrayList<>();
+                    slices.add(i, conTmp);
                 } else {
-                    portsTmp = slices.get(i);
+                    conTmp = slices.get(i);
                 }
-                portsTmp.add(ports[portIndex++]);
+                conTmp.add(host[portIndex] + Integer.toString(ports[portIndex++]));
                 if (portIndex == ports.length) {
                     portIndex = 0;
                 }
@@ -356,15 +356,15 @@ public class MongoBench {
         }
         int count = 1;
         for (List<Integer> portTmp : slices) {
-            System.out.printf("Thread %d will use ports %s\n", count++, portTmp.toString());
+            System.out.printf("Thread %d will connect to %s\n", count++, portTmp.toString());
         }
         return slices;
     }
 
 
-    private void doLoadPhase(String host, int[] ports, int numThreads, int numDocuments, int documentSize, int timeouts, boolean sslEnabled) {
+    private void doLoadPhase(String[] host, int[] ports, int numThreads, int numDocuments, int documentSize, int timeouts, boolean sslEnabled) {
         final Map<LoadThread, Thread> threads = new HashMap<LoadThread, Thread>(numThreads);
-        final List<List<Integer>> slices = createSlices(ports, numThreads);
+        final List<List<Integer>> slices = createSlices(host, ports, numThreads);
         for (int i = 0; i < numThreads; i++) {
             LoadThread l = new LoadThread(host, slices.get(i), numDocuments, documentSize, timeouts, sslEnabled);
             threads.put(l, new Thread(l));
