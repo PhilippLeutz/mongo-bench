@@ -63,8 +63,7 @@ public class MongoBench {
         final CommandLineParser parser = new DefaultParser();
         final Phase phase;
         final int[] ports;
-        final String[] hosts;
-        final String host;
+        final String[] host;
         int duration;
         int numThreads;
         int reportingInterval;
@@ -132,18 +131,17 @@ public class MongoBench {
 				catch (Exception e)
     				System.err.println(e.getMessage());
 				
-				hosts = new int[tmpIPs.size()];
+				host = new String[tmpIPs.size()];
 				ports = new int[tmpPorts.size()];
 
 				for(int i=0; i< tmpIPs.size(); i++) {
-					hosts[i] = tmpIPs.get(i);
+					host[i] = tmpIPs.get(i);
 					ports[i] = tmpPorts.get(i);
 				}
 			}
             if (cli.hasOption('t')) {
-                host = cli.getOptionValue('t');
-            } else {
-                host = "localhost";
+				host = new String[1];
+                host[0] = cli.getOptionValue('t');
             }
             if (cli.hasOption('d')) {
                 duration = Integer.parseInt(cli.getOptionValue('d'));
