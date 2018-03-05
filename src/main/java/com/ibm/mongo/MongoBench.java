@@ -57,11 +57,13 @@ public class MongoBench {
         ops.addOption("a", "record-latencies", true, "Set the file prefix to which to write latencies to");
         ops.addOption("o", "timeout", true, "Set the timeouts in seconds for networking operations");
         ops.addOption("u", "ssl", false, "Use SSL for MongoDB connections");
+        ops.addOption("f", "connect-file", false, "Use a connection file with IP:Port lines instead of p and t");
         ops.addOption("h", "help", false, "Show this help dialog");
 
         final CommandLineParser parser = new DefaultParser();
         final Phase phase;
         final int[] ports;
+        final String[] hosts;
         final String host;
         int duration;
         int numThreads;
@@ -116,6 +118,28 @@ public class MongoBench {
             } else {
                 ports = new int[]{27017};
             }
+			if(cli.hasOption('f') {
+				final String fileName = cli.getOptionValue('f');
+				final List<String> tmpIPs = new ArrayList<String>();
+				final List<Integer> tmpPorts = new ArrayList<Integer>();
+				try(BufferedReader b = new BufferedReader(new FileReader(fileName))) {
+					for(String l; (l = b.readLine()) != null; ) {
+						String[] ipPort = l.split(":");
+						tmpIPs.add(ipPort[0]);
+						tmpPorts.add(Integer.parseInt(ipPort[1]);
+					}
+				}	
+				catch (Exception e)
+    				System.err.println(e.getMessage());
+				
+				hosts = new int[tmpIPs.size()];
+				ports = new int[tmpPorts.size()];
+
+				for(int i=0; i< tmpIPs.size(); i++) {
+					hosts[i] = tmpIPs.get(i);
+					ports[i] = tmpPorts.get(i);
+				}
+			}
             if (cli.hasOption('t')) {
                 host = cli.getOptionValue('t');
             } else {
