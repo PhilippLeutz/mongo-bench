@@ -336,7 +336,7 @@ public class MongoBench {
         	}
         	for (int i = 0; i < ports.length; i++) {
             	int sliceIdx = i % numThreads;
-            	slices.get(sliceIdx).add(host[i] + Integer.toString(ports[i]));
+            	slices.get(sliceIdx).add(host[i] + ":" + Integer.toString(ports[i]));
         	}
         } else {
             int portIndex = 0;
@@ -348,7 +348,7 @@ public class MongoBench {
                 } else {
                     conTmp = slices.get(i);
                 }
-                conTmp.add(host[portIndex] + Integer.toString(ports[portIndex++]));
+                conTmp.add(host[portIndex] + ":" + Integer.toString(ports[portIndex++]));
                 if (portIndex == ports.length) {
                     portIndex = 0;
                 }
@@ -364,9 +364,9 @@ public class MongoBench {
 
     private void doLoadPhase(String[] host, int[] ports, int numThreads, int numDocuments, int documentSize, int timeouts, boolean sslEnabled) {
         final Map<LoadThread, Thread> threads = new HashMap<LoadThread, Thread>(numThreads);
-        final List<List<Integer>> slices = createSlices(host, ports, numThreads);
+        final List<List<String>> slices = createSlices(host, ports, numThreads);
         for (int i = 0; i < numThreads; i++) {
-            LoadThread l = new LoadThread(host, slices.get(i), numDocuments, documentSize, timeouts, sslEnabled);
+            LoadThread l = new LoadThread(slices.get(i), numDocuments, documentSize, timeouts, sslEnabled);
             threads.put(l, new Thread(l));
         }
 

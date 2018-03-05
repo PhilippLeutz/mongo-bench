@@ -33,8 +33,7 @@ public class LoadThread implements Runnable {
 
     private static final Logger log = LoggerFactory.getLogger(LoadThread.class);
 
-    private final String host;
-    private final List<Integer> ports;
+    private final List<String> ipPorts;		// A list with "IP:port" enteries
     private final int numDocuments;
     private final int docSize;
     private final int maxBatchSize = 1000;
@@ -44,9 +43,8 @@ public class LoadThread implements Runnable {
 
     private final static DecimalFormat decimalFormat = new DecimalFormat("0.0000");
 
-    public LoadThread(String host, List<Integer> ports, int numDocuments, int docSize, int timeout, boolean sslEnabled) {
-        this.host = host;
-        this.ports = ports;
+    public LoadThread(List<String> ipPorts, int numDocuments, int docSize, int timeout, boolean sslEnabled) {
+        this.ipPorts = ipPorts;
         this.numDocuments = numDocuments;
         this.docSize = docSize;
         this.timeoutMs = timeout * 1000;
@@ -55,8 +53,8 @@ public class LoadThread implements Runnable {
 
     @Override
     public void run() {
-        log.info("Loading data into {} instances on {}", ports.size(), host);
-        for (int i = 0; i < ports.size(); i++) {
+        log.info("Loading data into {} instances", ipPorts.size());
+        for (int i = 0; i < ipPorts.size(); i++) {
             int count = 0, currentBatchSize;
             final MongoClientOptions ops = MongoClientOptions.builder()
                     .maxWaitTime(timeoutMs)
@@ -66,7 +64,10 @@ public class LoadThread implements Runnable {
                     .serverSelectionTimeout(timeoutMs)
                     .sslEnabled(sslEnabled)
                     .build();
-            MongoClient client = new MongoClient(new ServerAddress(host, ports.get(i)), ops);
+			String[] parts = ipPorts[i].split(":");
+			String host = parts[0];
+			int port = parts[1];
+            MongoClient client = new MongoClient(new ServerAddress(host, port), ops);
             for (final String name : client.listDatabaseNames()) {
                 if (name.equalsIgnoreCase(MongoBench.DB_NAME)) {
                     log.warn("Database {} exists and will be purged before inserting", MongoBench.DB_NAME);
@@ -82,8 +83,8 @@ public class LoadThread implements Runnable {
                 try {
                     collection.insertMany(Arrays.asList(docs));
                 } catch (Exception e) {
-                    log.error("Error while inserting {} documents at {}:{}", currentBatchSize, host, ports.get(i));
-                    log.warn("Checking connection to {}:{}", host, ports.get(i));
+                    log.error("Error while inserting {} documents at {}:{}", currentBatchSize, host, port);
+                    log.warn("Checking connection to {}:{}", host, port);
                     boolean connected = false;
                     try {
                         while (!connected) {
@@ -94,7 +95,7 @@ public class LoadThread implements Runnable {
                     } catch (Exception ie) {
                         log.error("No connection to {}:{}. Reconnecting...");
                         client.close();
-                        client = new MongoClient(new ServerAddress(host, ports.get(i)), ops);
+                        client = new MongoClient(new ServerAddress(host, port), ops);
                     }
                 }
                 count += currentBatchSize;
@@ -111,7 +112,7 @@ public class LoadThread implements Runnable {
                 }
                 log.error("Overall {} inserts failed", numFailed);
             }
-            log.info("Finished loading {} documents in {}:{} [{} inserts/sec]", count, host, ports.get(i), rate);
+            log.info("Finished loading {} documents in {}:{} [{} inserts/sec]", count, host, port, rate);
         }
     }
 
