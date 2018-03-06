@@ -55,7 +55,7 @@ public class RunThread implements Runnable {
     private String prefixLatencyFile;
     private int timeoutMs;
     private final boolean sslEnabled;
-	private final Random rand = new Random();
+	private final Random rand;
 
     public RunThread(List<String> ipPorts, int numDocuments, float targetRate, 
 					String prefixLatencyFile, int timeout, boolean sslEnabled) {
@@ -65,6 +65,7 @@ public class RunThread implements Runnable {
         this.prefixLatencyFile = prefixLatencyFile;
         this.timeoutMs = timeout * 1000;
         this.sslEnabled = sslEnabled;
+        rand = new Random();
     }
 
     @Override

@@ -323,7 +323,7 @@ public class MongoBench {
         avgWriteLatency = avgWriteLatency / numInserts;
         tps = (numInserts + numReads) * 1000f / (duration);
         log.info("{} inserts, {} reads in {} s, {} requests/sec", numInserts, numReads, 
-						decimalFormat.format(duration / 1000f), decimalFormat.format(tps));
+                decimalFormat.format(duration / 1000f), decimalFormat.format(tps));
         log.info("Read latency Min/Max/Avg [ms]: {}/{}/{}", decimalFormat.format(minReadLatency / 1000000f),
                 decimalFormat.format(maxReadLatency / 1000000f), decimalFormat.format(avgReadLatency / 1000000f));
         log.info("Write latency Min/Max/Avg [ms]: {}/{}/{}", decimalFormat.format(minWriteLatency / 1000000f),
