@@ -27,18 +27,18 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.Random;
 
 public class RunThread implements Runnable {
     private static final Logger log = LoggerFactory.getLogger(RunThread.class);
     private AtomicBoolean stop = new AtomicBoolean(false);
     private float targetRatio = 0.9f;
     private float currentRatio = 0f;
+	private int numDocuments = 0;
     private int numInserts = 0;
     private int numReads = 0;
     private final List<String> ipPorts;
     private String data = RandomStringUtils.randomAlphabetic(1024);
-    private final Document[] toRead = new Document[9];
-    private int readIndex = 0;
     private long maxReadlatency = 0;
     private long minReadLatency = Long.MAX_VALUE;
     private long maxWriteLatency = 0;
@@ -55,13 +55,13 @@ public class RunThread implements Runnable {
     private String prefixLatencyFile;
     private int timeoutMs;
     private final boolean sslEnabled;
+	private final Random rand = new Random();
 
-    public RunThread(List<String> ipPorts, float targetRate, String prefixLatencyFile, int timeout, boolean sslEnabled) {
+    public RunThread(List<String> ipPorts, int numDocuments, float targetRate, 
+					String prefixLatencyFile, int timeout, boolean sslEnabled) {
         this.ipPorts = ipPorts;
+		this.numDocuments = numDocuments;
         this.targetRate = targetRate;
-        for (int i = 0; i < 9; i++) {
-            toRead[i] = new Document("_id", i);
-        }
         this.prefixLatencyFile = prefixLatencyFile;
         this.timeoutMs = timeout * 1000;
         this.sslEnabled = sslEnabled;
@@ -199,9 +199,11 @@ public class RunThread implements Runnable {
     }
 
     private void readRecord(MongoClient client) throws IOException {
-        final Document doc = toRead[readIndex];
+        final randKey = rand.nextInt(numDocuments);
+        final Document doc = new Document("_id", randKey); 
         long start = System.nanoTime();
-        final Document fetched = client.getDatabase(MongoBench.DB_NAME).getCollection(MongoBench.COLLECTION_NAME).find(toRead[readIndex]).first();
+        final Document fetched = client.getDatabase(MongoBench.DB_NAME)
+				.getCollection(MongoBench.COLLECTION_NAME).find(doc).first();
         long latency = System.nanoTime() - start;
         recordLatency(latency, readLatencySink);
         if (latency < minReadLatency) {
@@ -213,11 +215,6 @@ public class RunThread implements Runnable {
         accReadLatencies += latency;
         if (fetched == null) {
             log.warn("Unable to read document with id {}", doc.get("_id"));
-        }
-        if (readIndex + 2 >= toRead.length) {
-            readIndex = 0;
-        } else {
-            readIndex++;
         }
         numReads++;
     }
@@ -274,7 +271,6 @@ public class RunThread implements Runnable {
     public synchronized void resetData() {
         numInserts = 0;
         numReads = 0;
-        readIndex = 0;
         maxReadlatency = 0;
         minReadLatency = Long.MAX_VALUE;
         maxWriteLatency = 0;
