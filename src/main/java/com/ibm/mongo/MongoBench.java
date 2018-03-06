@@ -208,13 +208,14 @@ public class MongoBench {
         }
     }
 
-    private void doRunPhase(String[] host, int[] ports, int warmup, int duration, int numThreads, int reportingInterval, float targetRate, String latencyFilePrefix, int timeouts, boolean sslEnabled) {
+    private void doRunPhase(String[] host, int[] ports, int warmup, int duration, int numThreads, 
+					int reportingInterval, float targetRate, String latencyFilePrefix, int timeouts, boolean sslEnabled) {
         log.info("Starting {} threads for {} instances", numThreads, ports.length);
         final Map<RunThread, Thread> threads = new HashMap<RunThread, Thread>(numThreads);
-        final List<List<Integer>> slices = createSlices(ports, numThreads);
+        final List<List<String>> slices = createSlices(host, ports, numThreads);
 
         for (int i = 0; i < numThreads; i++) {
-            RunThread t = new RunThread(host, slices.get(i), targetRate / (float) numThreads, latencyFilePrefix, timeouts, sslEnabled);
+            RunThread t = new RunThread(slices.get(i), targetRate / (float) numThreads, latencyFilePrefix, timeouts, sslEnabled);
             threads.put(t, new Thread(t));
         }
         for (final Thread t : threads.values()) {
@@ -321,7 +322,8 @@ public class MongoBench {
         avgReadLatency = avgReadLatency / numReads;
         avgWriteLatency = avgWriteLatency / numInserts;
         tps = (numInserts + numReads) * 1000f / (duration);
-        log.info("{} inserts, {} reads in {} s, {} requests/sec", numInserts, numReads, decimalFormat.format(duration / 1000f), decimalFormat.format(tps));
+        log.info("{} inserts, {} reads in {} s, {} requests/sec", numInserts, numReads, 
+						decimalFormat.format(duration / 1000f), decimalFormat.format(tps));
         log.info("Read latency Min/Max/Avg [ms]: {}/{}/{}", decimalFormat.format(minReadLatency / 1000000f),
                 decimalFormat.format(maxReadLatency / 1000000f), decimalFormat.format(avgReadLatency / 1000000f));
         log.info("Write latency Min/Max/Avg [ms]: {}/{}/{}", decimalFormat.format(minWriteLatency / 1000000f),

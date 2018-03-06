@@ -64,9 +64,9 @@ public class LoadThread implements Runnable {
                     .serverSelectionTimeout(timeoutMs)
                     .sslEnabled(sslEnabled)
                     .build();
-			String[] parts = ipPorts[i].split(":");
-			String host = parts[0];
-			int port = parts[1];
+            String[] parts = ipPorts[i].split(":");
+            String host = parts[0];
+            int port = parts[1];
             MongoClient client = new MongoClient(new ServerAddress(host, port), ops);
             for (final String name : client.listDatabaseNames()) {
                 if (name.equalsIgnoreCase(MongoBench.DB_NAME)) {

@@ -69,7 +69,7 @@ public class RunThread implements Runnable {
 
     @Override
     public void run() {
-        int portsLen = ports.size();
+        int portsLen = ipPorts.size();
         final MongoClient[] clients = new MongoClient[portsLen];
         log.info("Opening {} connections", portsLen);
         for (int i = 0; i < portsLen; i++) {
@@ -84,7 +84,7 @@ public class RunThread implements Runnable {
             String[] parts = ipPorts[i].split(":");
 			String host = parts[0];
 			int port = Integer.parseInt(parts[1]);
-			clients[i] = new MongoClient(new ServerAddress(host, ports.get(i)), ops);
+			clients[i] = new MongoClient(new ServerAddress(host, port), ops);
         }
 
         if (prefixLatencyFile != null) {
