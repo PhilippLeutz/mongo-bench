@@ -21,7 +21,7 @@ import org.apache.commons.cli.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
+import java.io.*;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -74,7 +74,7 @@ public class MongoBench {
         String latencyFilePrefix;
         int timeouts;
         boolean sslEnabled;
-
+        
         try {
             final CommandLine cli = parser.parse(ops, args);
             if (cli.hasOption('h')) {
@@ -92,9 +92,12 @@ public class MongoBench {
             } else {
                 throw new ParseException("No phase given. Try \"--help/-h\"");
             }
-            if (cli.hasOption('p')) {
+           
+            final List<String> tmpIPs = new ArrayList<String>();
+            final List<Integer> tmpPorts = new ArrayList<Integer>();
+
+			if (cli.hasOption('p')) {
                 final String portVal = cli.getOptionValue('p');
-                final List<Integer> tmpPorts = new ArrayList<Integer>();
                 for (final String range : portVal.split(",")) {
                     int dashIdx = range.indexOf('-');
                     if (dashIdx == -1) {
@@ -110,39 +113,32 @@ public class MongoBench {
                         }
                     }
                 }
-                ports = new int[tmpPorts.size()];
-                for (int i = 0; i < tmpPorts.size(); i++) {
-                    ports[i] = tmpPorts.get(i);
-                }
-            } else {
-                ports = new int[]{27017};
             }
-			if(cli.hasOption('f') {
+			if(cli.hasOption('f')) {
 				final String fileName = cli.getOptionValue('f');
-				final List<String> tmpIPs = new ArrayList<String>();
-				final List<Integer> tmpPorts = new ArrayList<Integer>();
 				try(BufferedReader b = new BufferedReader(new FileReader(fileName))) {
 					for(String l; (l = b.readLine()) != null; ) {
 						String[] ipPort = l.split(":");
 						tmpIPs.add(ipPort[0]);
-						tmpPorts.add(Integer.parseInt(ipPort[1]);
+						tmpPorts.add(Integer.parseInt(ipPort[1]));
 					}
 				}	
-				catch (Exception e)
+				catch (Exception e) {
     				System.err.println(e.getMessage());
-				
-				host = new String[tmpIPs.size()];
-				ports = new int[tmpPorts.size()];
-
-				for(int i=0; i< tmpIPs.size(); i++) {
-					host[i] = tmpIPs.get(i);
-					ports[i] = tmpPorts.get(i);
-				}
+				}	
 			}
             if (cli.hasOption('t')) {
-				host = new String[1];
-                host[0] = cli.getOptionValue('t');
+                tmpIPs.add(cli.getOptionValue('t'));
             }
+
+			host = new String[tmpIPs.size()];
+			ports = new int[tmpPorts.size()];
+
+			for(int i=0; i< tmpIPs.size(); i++) {
+				host[i] = tmpIPs.get(i);
+				ports[i] = tmpPorts.get(i);
+			}
+
             if (cli.hasOption('d')) {
                 duration = Integer.parseInt(cli.getOptionValue('d'));
             } else {
@@ -356,9 +352,9 @@ public class MongoBench {
                 }
             }
         }
-        int count = 1;
-        for (List<Integer> portTmp : slices) {
-            System.out.printf("Thread %d will connect to %s\n", count++, portTmp.toString());
+        int count = 0;
+        for (List<String> portTmp : slices) {
+            System.out.printf("Thread %d will connect to %s\n", count++, portTmp);
         }
         return slices;
     }

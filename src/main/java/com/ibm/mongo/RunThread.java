@@ -55,7 +55,7 @@ public class RunThread implements Runnable {
     private String prefixLatencyFile;
     private int timeoutMs;
     private final boolean sslEnabled;
-	private final Random rand;
+	private Random rand;
 
     public RunThread(List<String> ipPorts, int numDocuments, float targetRate, 
 					String prefixLatencyFile, int timeout, boolean sslEnabled) {
@@ -82,7 +82,7 @@ public class RunThread implements Runnable {
                     .serverSelectionTimeout(timeoutMs)
                     .sslEnabled(sslEnabled)
                     .build();
-            String[] parts = ipPorts[i].split(":");
+            String[] parts = ipPorts.get(i).split(":");
 			String host = parts[0];
 			int port = Integer.parseInt(parts[1]);
 			clients[i] = new MongoClient(new ServerAddress(host, port), ops);
@@ -185,7 +185,7 @@ public class RunThread implements Runnable {
     }
 
     private void updateRecord(MongoClient client) throws IOException {
-        final randKey = rand.nextInt(numDocuments);
+        final int randKey = rand.nextInt(numDocuments);
         final Document doc = new Document("_id", randKey); 
         long start = System.nanoTime();
         client.getDatabase(MongoBench.DB_NAME).getCollection(MongoBench.COLLECTION_NAME)
@@ -203,7 +203,7 @@ public class RunThread implements Runnable {
     }
 
     private void readRecord(MongoClient client) throws IOException {
-        final randKey = rand.nextInt(numDocuments);
+        final int randKey = rand.nextInt(numDocuments);
         final Document doc = new Document("_id", randKey); 
         long start = System.nanoTime();
         final Document fetched = client.getDatabase(MongoBench.DB_NAME)
