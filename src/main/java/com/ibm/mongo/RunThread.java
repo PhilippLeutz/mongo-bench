@@ -35,8 +35,7 @@ public class RunThread implements Runnable {
     private float currentRatio = 0f;
     private int numInserts = 0;
     private int numReads = 0;
-    private final String host;
-    private final List<Integer> ports;
+    private final List<String> ipPorts;
     private String data = RandomStringUtils.randomAlphabetic(1024);
     private final Document[] toRead = new Document[9];
     private int readIndex = 0;
@@ -57,9 +56,8 @@ public class RunThread implements Runnable {
     private int timeoutMs;
     private final boolean sslEnabled;
 
-    public RunThread(String host, List<Integer> ports, float targetRate, String prefixLatencyFile, int timeout, boolean sslEnabled) {
-        this.host = host;
-        this.ports = ports;
+    public RunThread(List<String> ipPorts, float targetRate, String prefixLatencyFile, int timeout, boolean sslEnabled) {
+        this.ipPorts = ipPorts;
         this.targetRate = targetRate;
         for (int i = 0; i < 9; i++) {
             toRead[i] = new Document("_id", i);
@@ -83,7 +81,10 @@ public class RunThread implements Runnable {
                     .serverSelectionTimeout(timeoutMs)
                     .sslEnabled(sslEnabled)
                     .build();
-            clients[i] = new MongoClient(new ServerAddress(host, ports.get(i)), ops);
+            String[] parts = ipPorts[i].split(":");
+			String host = parts[0];
+			int port = Integer.parseInt(parts[1]);
+			clients[i] = new MongoClient(new ServerAddress(host, ports.get(i)), ops);
         }
 
         if (prefixLatencyFile != null) {
@@ -108,7 +109,8 @@ public class RunThread implements Runnable {
             while (!stop.get()) {
                 currentRatio = (float) numReads / (float) (numInserts + numReads);
                 if (targetRate > 0) {
-                    if ((float) (numReads + numInserts) * 1000f / (float) (System.currentTimeMillis() - startMillis) > targetRate) {
+                    if ((float) (numReads + numInserts) * 1000f / (float) (System.currentTimeMillis()
+										   	- startMillis) > targetRate) {
                         sleep(ratePause);
                     }
                 }
@@ -118,24 +120,30 @@ public class RunThread implements Runnable {
                         readRecord(clients[clientIdx]);
                     } catch (MongoSocketException | MongoTimeoutException e) {
                         timeouts++;
-                        log.warn("Timeout occured while reading from {}:{}. Trying to reconnect client No. {}", clients[clientIdx].getAddress().getHost(), clients[clientIdx].getAddress().getPort(), clientIdx);
+                        log.warn("Timeout occured while reading from {}:{}. Trying to reconnect client No. {}", 
+										clients[clientIdx].getAddress().getHost(), 
+										clients[clientIdx].getAddress().getPort(), clientIdx);
                         final MongoClientOptions ops = clients[clientIdx].getMongoClientOptions();
                         final ServerAddress address = clients[clientIdx].getAddress();
                         clients[clientIdx].close();
                         clients[clientIdx] = new MongoClient(address, ops);
-                        log.info("Reconnected to {}:{}", clients[clientIdx].getAddress().getHost(), clients[clientIdx].getAddress().getPort());
+                        log.info("Reconnected to {}:{}", clients[clientIdx].getAddress().getHost(), 
+										clients[clientIdx].getAddress().getPort());
                     }
                 } else {
                     try {
                         insertRecord(clients[clientIdx]);
                     } catch (MongoSocketException | MongoTimeoutException e) {
                         timeouts++;
-                        log.warn("Timeout occured while writing to {}:{}. Trying to reconnect client No. {}", clients[clientIdx].getAddress().getHost(), clients[clientIdx].getAddress().getPort(), clientIdx);
+                        log.warn("Timeout occured while writing to {}:{}. Trying to reconnect client No. {}", 
+										clients[clientIdx].getAddress().getHost(), 
+										clients[clientIdx].getAddress().getPort(), clientIdx);
                         final MongoClientOptions ops = clients[clientIdx].getMongoClientOptions();
                         final ServerAddress address = clients[clientIdx].getAddress();
                         clients[clientIdx].close();
                         clients[clientIdx] = new MongoClient(address, ops);
-                        log.info("Reconnected to {}:{}", clients[clientIdx].getAddress().getHost(), clients[clientIdx].getAddress().getPort());
+                        log.info("Reconnected to {}:{}", clients[clientIdx].getAddress().getHost(), 
+										clients[clientIdx].getAddress().getPort());
                     }
                 }
                 elapsed = System.currentTimeMillis() - startMillis;
