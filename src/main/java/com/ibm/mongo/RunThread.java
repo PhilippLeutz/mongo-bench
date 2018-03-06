@@ -189,7 +189,7 @@ public class RunThread implements Runnable {
         final Document doc = new Document("_id", randKey); 
         long start = System.nanoTime();
         client.getDatabase(MongoBench.DB_NAME).getCollection(MongoBench.COLLECTION_NAME)
-				.updateOne(doc, new Document("data", data));
+				.updateOne(doc, new Document("$set", new Document("data", data)));
         long latency = System.nanoTime() - start;
         recordLatency(latency, insertLatencySink);
         if (latency < minWriteLatency) {
