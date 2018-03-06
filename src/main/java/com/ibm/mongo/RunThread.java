@@ -132,7 +132,7 @@ public class RunThread implements Runnable {
                     }
                 } else {
                     try {
-                        insertRecord(clients[clientIdx]);
+                        updateRecord(clients[clientIdx]);
                     } catch (MongoSocketException | MongoTimeoutException e) {
                         timeouts++;
                         log.warn("Timeout occured while writing to {}:{}. Trying to reconnect client No. {}", 
@@ -183,9 +183,12 @@ public class RunThread implements Runnable {
         return ((float) (numInserts + numReads) * 1000f) / (float) elapsed;
     }
 
-    private void insertRecord(MongoClient client) throws IOException {
+    private void updateRecord(MongoClient client) throws IOException {
+        final randKey = rand.nextInt(numDocuments);
+        final Document doc = new Document("_id", randKey); 
         long start = System.nanoTime();
-        client.getDatabase(MongoBench.DB_NAME).getCollection(MongoBench.COLLECTION_NAME).insertOne(new Document("data", data));
+        client.getDatabase(MongoBench.DB_NAME).getCollection(MongoBench.COLLECTION_NAME)
+				.updateOne(doc, new Document("data", data));
         long latency = System.nanoTime() - start;
         recordLatency(latency, insertLatencySink);
         if (latency < minWriteLatency) {

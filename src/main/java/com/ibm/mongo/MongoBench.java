@@ -201,21 +201,21 @@ public class MongoBench {
             if (phase == Phase.LOAD) {
                 bench.doLoadPhase(host, ports, numThreads, numDocuments, documentSize, timeouts, sslEnabled);
             } else {
-                bench.doRunPhase(host, ports, warmup, duration, numThreads, reportingInterval, rateLimit, latencyFilePrefix, timeouts, sslEnabled);
+                bench.doRunPhase(host, ports, numDocuments, warmup, duration, numThreads, reportingInterval, rateLimit, latencyFilePrefix, timeouts, sslEnabled);
             }
         } catch (ParseException e) {
             log.error("Unable to parse", e);
         }
     }
 
-    private void doRunPhase(String[] host, int[] ports, int warmup, int duration, int numThreads, 
+    private void doRunPhase(String[] host, int[] ports, int numDocuments, int warmup, int duration, int numThreads, 
 					int reportingInterval, float targetRate, String latencyFilePrefix, int timeouts, boolean sslEnabled) {
         log.info("Starting {} threads for {} instances", numThreads, ports.length);
         final Map<RunThread, Thread> threads = new HashMap<RunThread, Thread>(numThreads);
         final List<List<String>> slices = createSlices(host, ports, numThreads);
 
         for (int i = 0; i < numThreads; i++) {
-            RunThread t = new RunThread(slices.get(i), targetRate / (float) numThreads, latencyFilePrefix, timeouts, sslEnabled);
+            RunThread t = new RunThread(slices.get(i), numDocuments, targetRate / (float) numThreads, latencyFilePrefix, timeouts, sslEnabled);
             threads.put(t, new Thread(t));
         }
         for (final Thread t : threads.values()) {
