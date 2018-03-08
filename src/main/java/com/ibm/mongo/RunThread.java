@@ -30,16 +30,56 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.Random;
 
 public class RunThread implements Runnable {
+
+	/**
+	 * DBStats.
+	 * This class holds the statistics for a particular DB.
+	 */
+	private class DbStats {
+		 public long DbIdx = 0;
+		 public String host;
+		 public int port = 0;
+		 public long numReads = 0;
+		 public long numUpdates = 0;
+		 public long timeouts = 0;
+		 public long maxReadLatency = 0;
+		 public long minReadLatency = Long.MAX_VALUE;
+		 public long maxWriteLatency = 0;
+		 public long minWriteLatency = Long.MAX_VALUE;
+		 public float accReadLatencies = 0;
+		 public float accWriteLatencies = 0;
+
+		public DbStats(int DbIdx, String host, int port) {
+			this.DbIdx = DbIdx;
+			this.host = host;
+			this.port = port;
+		}
+
+		public resetStat() {
+			numReads = 0;
+        	numUpdates = 0;
+			timeouts = 0;
+        	maxReadLatency = 0;
+        	minReadLatency = Long.MAX_VALUE;
+        	maxWriteLatency = 0;
+        	minWriteLatency = Long.MAX_VALUE;
+			accReadLatencies = 0;
+			accWriteLatencies = 0;
+		}
+	}
+
     private static final Logger log = LoggerFactory.getLogger(RunThread.class);
     private AtomicBoolean stop = new AtomicBoolean(false);
-    private float targetRatio = 0.9f;
+    private int id = -1;
+	private float targetRatio = 0.9f;
     private float currentRatio = 0f;
 	private int numDocuments = 0;
+	private int numDbs = 0;
     private int numInserts = 0;
     private int numReads = 0;
-    private final List<String> ipPorts;
+    private final List<String> ipPorts;	// @todo This might not be required.
     private String data = RandomStringUtils.randomAlphabetic(1024);
-    private long maxReadlatency = 0;
+    private long maxReadLatency = 0;
     private long minReadLatency = Long.MAX_VALUE;
     private long maxWriteLatency = 0;
     private long minWriteLatency = Long.MAX_VALUE;
@@ -55,18 +95,29 @@ public class RunThread implements Runnable {
     private String prefixLatencyFile;
     private int timeoutMs;
     private final boolean sslEnabled;
+	private DbStats[] dbStats;
 	private Random rand;
 
-    public RunThread(List<String> ipPorts, int numDocuments, float targetRate, 
+    public RunThread(int id, List<String> ipPorts, int numDocuments, float targetRate, 
 					String prefixLatencyFile, int timeout, boolean sslEnabled) {
+        this.id = id;
         this.ipPorts = ipPorts;
+		this.numDbs = ipPorts.size();
 		this.numDocuments = numDocuments;
         this.targetRate = targetRate;
         this.prefixLatencyFile = prefixLatencyFile;
         this.timeoutMs = timeout * 1000;
         this.sslEnabled = sslEnabled;
+		
         rand = new Random();
-    }
+		
+		dbStats = new DbStats[numDbs];
+		for(int i = 0;i < numDbs; i++) {
+            String[] parts = ipPorts.get(i).split(":");
+			dbStats[i] = new DbStats(i, parts[0], Integer.parseInt(parts[1]));
+		}
+	}
+
 
     @Override
     public void run() {
@@ -82,9 +133,8 @@ public class RunThread implements Runnable {
                     .serverSelectionTimeout(timeoutMs)
                     .sslEnabled(sslEnabled)
                     .build();
-            String[] parts = ipPorts.get(i).split(":");
-			String host = parts[0];
-			int port = Integer.parseInt(parts[1]);
+			String host = dbStats[i].host;
+			int port = dbStats[i].port;
 			clients[i] = new MongoClient(new ServerAddress(host, port), ops);
         }
 
@@ -118,10 +168,12 @@ public class RunThread implements Runnable {
                 clientIdx = clientIdx + 1 < clients.length ? clientIdx + 1 : 0;
                 if (currentRatio < targetRatio) {
                     try {
-                        readRecord(clients[clientIdx]);
+                        readRecord(clientIdx, clients[clientIdx]);
                     } catch (MongoSocketException | MongoTimeoutException e) {
                         timeouts++;
-                        log.warn("Timeout occured while reading from {}:{}. Trying to reconnect client No. {}", 
+						dbStats[clientIdx].timeouts++;
+                        log.warn("Timeout occured for thread {} while reading from {}:{}. Trying to reconnect client No. {}", 
+										id,
 										clients[clientIdx].getAddress().getHost(), 
 										clients[clientIdx].getAddress().getPort(), clientIdx);
                         final MongoClientOptions ops = clients[clientIdx].getMongoClientOptions();
@@ -133,10 +185,12 @@ public class RunThread implements Runnable {
                     }
                 } else {
                     try {
-                        updateRecord(clients[clientIdx]);
+                        updateRecord(clientIdx, clients[clientIdx]);
                     } catch (MongoSocketException | MongoTimeoutException e) {
                         timeouts++;
-                        log.warn("Timeout occured while writing to {}:{}. Trying to reconnect client No. {}", 
+						dbStats[clientIdx].timeouts++;
+                        log.warn("Timeout occured for thread {} while writing to {}:{}. Trying to reconnect client No. {}", 
+										id,
 										clients[clientIdx].getAddress().getHost(), 
 										clients[clientIdx].getAddress().getPort(), clientIdx);
                         final MongoClientOptions ops = clients[clientIdx].getMongoClientOptions();
@@ -184,7 +238,7 @@ public class RunThread implements Runnable {
         return ((float) (numInserts + numReads) * 1000f) / (float) elapsed;
     }
 
-    private void updateRecord(MongoClient client) throws IOException {
+    private void updateRecord(int clientIdx, MongoClient client) throws IOException {
         final int randKey = rand.nextInt(numDocuments);
         final Document doc = new Document("_id", randKey); 
         long start = System.nanoTime();
@@ -195,14 +249,22 @@ public class RunThread implements Runnable {
         if (latency < minWriteLatency) {
             minWriteLatency = latency;
         }
+		if (latency < dbStats[clientIdx].minWriteLatency) {
+            dbStats[clientIdx].minWriteLatency = latency;
+        }
         if (latency > maxWriteLatency) {
             maxWriteLatency = latency;
         }
+		if (latency > dbStats[clientIdx].maxWriteLatency) {
+            dbStats[clientIdx].maxWriteLatency = latency;
+        }
         accWriteLatencies += latency;
+		dbStats[clientIdx].accWriteLatencies += latency;
         numInserts++;
+		dbStats[clientIdx].numUpdates++;
     }
 
-    private void readRecord(MongoClient client) throws IOException {
+    private void readRecord(int clientIdx, MongoClient client) throws IOException {
         final int randKey = rand.nextInt(numDocuments);
         final Document doc = new Document("_id", randKey); 
         long start = System.nanoTime();
@@ -213,14 +275,24 @@ public class RunThread implements Runnable {
         if (latency < minReadLatency) {
             minReadLatency = latency;
         }
-        if (latency > maxReadlatency) {
-            maxReadlatency = latency;
+        if (latency > maxReadLatency) {
+            maxReadLatency = latency;
+        }
+		if (latency < dbStats[clientIdx].minReadLatency) {
+            dbStats[clientIdx].minReadLatency = latency;
+		}
+		if (latency > dbStats[clientIdx].maxReadLatency) {
+            dbStats[clientIdx].maxReadLatency = latency;
         }
         accReadLatencies += latency;
+		dbStats[clientIdx].accReadLatencies += latency;
         if (fetched == null) {
-            log.warn("Unable to read document with id {}", doc.get("_id"));
+            log.warn("Thread {} client {} Unable to read document with id {}", 
+							id, clientIdx,
+							doc.get("_id"));
         }
         numReads++;
+		dbStats[clientIdx].numReads++;
     }
 
     private void recordLatency(final long latency, final FileOutputStream sink) throws IOException {
@@ -244,7 +316,7 @@ public class RunThread implements Runnable {
     }
 
     public long getMaxReadlatency() {
-        return maxReadlatency;
+        return maxReadLatency;
     }
 
     public long getMaxWriteLatency() {
@@ -275,12 +347,16 @@ public class RunThread implements Runnable {
     public synchronized void resetData() {
         numInserts = 0;
         numReads = 0;
-        maxReadlatency = 0;
+        maxReadLatency = 0;
         minReadLatency = Long.MAX_VALUE;
         maxWriteLatency = 0;
         minWriteLatency = Long.MAX_VALUE;
         accReadLatencies = 0;
         accWriteLatencies = 0;
         startMillis = System.currentTimeMillis();
-    }
+
+   		for(int i=0;i<numDbs;i++) {
+			dbStats[i].resetStat();
+		}
+	}
 }

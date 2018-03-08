@@ -211,7 +211,8 @@ public class MongoBench {
         final List<List<String>> slices = createSlices(host, ports, numThreads);
 
         for (int i = 0; i < numThreads; i++) {
-            RunThread t = new RunThread(slices.get(i), numDocuments, targetRate / (float) numThreads, latencyFilePrefix, timeouts, sslEnabled);
+            RunThread t = new RunThread(i, slices.get(i), numDocuments, targetRate / (float) numThreads, 
+							latencyFilePrefix, timeouts, sslEnabled);
             threads.put(t, new Thread(t));
         }
         for (final Thread t : threads.values()) {
