@@ -286,16 +286,21 @@ public class MongoBench {
         avgRatePerThread = avgRatePerThread / (float) numThreads;
         log.info("Read {} and inserted {} documents in {} secs", numReads, numInserts, decimalFormat.format((float) elapsed / 1000f));
         log.info("Overall transaction rate: {} transactions/second", decimalFormat.format(rate));
-        log.info("Average transaction rate pre thread: {} transactions/second", decimalFormat.format(avgRatePerThread));
+        log.info("Average transaction rate per thread: {} transactions/second", decimalFormat.format(avgRatePerThread));
         log.info("Average transaction rate per instance: {} transactions/second", decimalFormat.format(rate / (float) ports.length));
         collectAndReportLatencies(threads.keySet(), elapsed);
 
         // Write the per DB stats to a file
-        PrintWriter pw = new PrintWriter("/tmp/per_db_stats.txt", "UTF-8");
-        pw.println("Thread host port time tps numRds minRdLat maxRdLat AvgRdLat "
-                        + "numUpdts minUpdtLat maxUpdtLat AvgUpdtLat timeouts");
-        for (Runthread r : threads.keySet()) {
-            r.writeDbStats(pw);
+        try {
+            PrintWriter pw = new PrintWriter("/tmp/per_db_stats.txt", "UTF-8");
+            pw.println("Thread host port time[s] tps numRds minRdLat[ns] maxRdLat[ns] AvgRdLat[ms] "
+                            + "numUpdts minUpdtLat[ns] maxUpdtLat[ns] AvgUpdtLat[ms] timeouts");
+            for (final RunThread r : threads.keySet()) {
+                r.writeDbStats(pw);
+            }
+            pw.close();
+        } catch (Exception e) {
+            e.printStackTrace();
         }
 
         log.info("Find the DB stats in /tmp/per_db_stats.txt file");

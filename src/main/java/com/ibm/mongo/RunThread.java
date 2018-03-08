@@ -23,11 +23,13 @@ import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.*;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.Random;
+import java.util.Locale;
 
 public class RunThread implements Runnable {
 
@@ -89,15 +91,15 @@ public class RunThread implements Runnable {
             accUpdateLatencies += updateLatency;
         }
         
-        public float getRate(int elapsed) {
+        public float getRate(long elapsed) {
             return ((float) (numUpdates + numReads) * 1000f) / (float) elapsed;
         }
 
-        public float getAvgReadLatencyMs() {
+        public double getAvgReadLatencyMs() {
             return accReadLatencies/(numReads * 1e6);
         }
 
-        public float getAvgUpdateLatencyMs() {
+        public double getAvgUpdateLatencyMs() {
             return accUpdateLatencies/(numUpdates * 1e6);
         }
     }
@@ -384,13 +386,14 @@ public class RunThread implements Runnable {
 
     public void writeDbStats(PrintWriter pw) {
         for(int i=0;i<numDbs;i++) {
-            pw.println("%d %s %d %d %.2f %d %d %d %d %d %d %d %d %d",
+            pw.format(Locale.US, "%d %s %d %d %.2f %d %d %d %.2f %d %d %d %.2f %d",
                             id, dbStats[i].host, dbStats[i].port, elapsed/1000, dbStats[i].getRate(elapsed),
                             dbStats[i].numReads, dbStats[i].minReadLatency,
                             dbStats[i].maxReadLatency, dbStats[i].getAvgReadLatencyMs(),
                             dbStats[i].numUpdates, dbStats[i].minUpdateLatency,
                             dbStats[i].maxUpdateLatency, dbStats[i].getAvgUpdateLatencyMs(),
-                            dbStats[i].timeouts);                           
+                            dbStats[i].timeouts);                          
+            pw.println(); 
         }
 
     }
