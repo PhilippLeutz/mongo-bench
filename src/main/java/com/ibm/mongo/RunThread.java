@@ -30,6 +30,9 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.Random;
 import java.util.Locale;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 
 public class RunThread implements Runnable {
 
@@ -107,8 +110,8 @@ public class RunThread implements Runnable {
     private static final Logger log = LoggerFactory.getLogger(RunThread.class);
     private AtomicBoolean stop = new AtomicBoolean(false);
     private int id = -1;
-    private float targetRatio = 0.9f;
-    private float currentRatio = 0f;
+    private int targetReads = 9;   // Update after this much reads
+    private int currentReads = 0;
     private int numDocuments = 0;
     private int numDbs = 0;
     private int numInserts = 0;
@@ -183,6 +186,11 @@ public class RunThread implements Runnable {
             }
         }
 
+        List<Integer> clientList = new ArrayList<Integer>();
+        for(int i=0;i<clients.length;i++) {
+            clientList.add(i);
+        }
+        int readIdx = 0;
         int clientIdx = 0;
         initialized.set(true);
         long ratePause = (long) (1000f / targetRate);
@@ -194,15 +202,15 @@ public class RunThread implements Runnable {
         // do the actual benchmark measurements
         try {
             while (!stop.get()) {
-                currentRatio = (float) numReads / (float) (numInserts + numReads);
                 if (targetRate > 0) {
                     if ((float) (numReads + numInserts) * 1000f / (float) (System.currentTimeMillis()
                                             - startMillis) > targetRate) {
                         sleep(ratePause);
                     }
                 }
-                clientIdx = clientIdx + 1 < clients.length ? clientIdx + 1 : 0;
-                if (currentRatio < targetRatio) {
+                clientIdx = clientList.get(readIdx);
+                if (currentReads < targetReads) {
+                    currentReads++;
                     try {
                         readRecord(clientIdx, clients[clientIdx]);
                     } catch (MongoSocketException | MongoTimeoutException e) {
@@ -220,6 +228,7 @@ public class RunThread implements Runnable {
                                         clients[clientIdx].getAddress().getPort());
                     }
                 } else {
+                    currentReads = 0;
                     try {
                         updateRecord(clientIdx, clients[clientIdx]);
                     } catch (MongoSocketException | MongoTimeoutException e) {
@@ -238,6 +247,10 @@ public class RunThread implements Runnable {
                     }
                 }
                 elapsed = System.currentTimeMillis() - startMillis;
+                readIdx = readIdx + 1 < clientList.size() ? readIdx + 1 : 0;
+                if(readIdx == 0) {
+                    Collections.shuffle(clientList);
+                }
             }
         } catch (IOException e) {
             log.error("Error while running benchmark", e);
