@@ -96,7 +96,7 @@ public class MongoBench {
             final List<String> tmpIPs = new ArrayList<String>();
             final List<Integer> tmpPorts = new ArrayList<Integer>();
 
-			if (cli.hasOption('p')) {
+            if (cli.hasOption('p')) {
                 final String portVal = cli.getOptionValue('p');
                 for (final String range : portVal.split(",")) {
                     int dashIdx = range.indexOf('-');
@@ -114,43 +114,43 @@ public class MongoBench {
                     }
                 }
             }
-			if(cli.hasOption('f')) {
-				 if (cli.hasOption('t')) {
-                 	throw new ParseException("Cannot use -t and -f together");
+            if(cli.hasOption('f')) {
+                 if (cli.hasOption('t')) {
+                    throw new ParseException("Cannot use -t and -f together");
                  }
 
-				final String fileName = cli.getOptionValue('f');
-				try(BufferedReader b = new BufferedReader(new FileReader(fileName))) {
-					for(String l; (l = b.readLine()) != null; ) {
-						String[] ipPort = l.split(":");
-						tmpIPs.add(ipPort[0]);
-						tmpPorts.add(Integer.parseInt(ipPort[1]));
-					}
-				}	
-				catch (Exception e) {
-    				System.err.println(e.getMessage());
-				}	
-			}
+                final String fileName = cli.getOptionValue('f');
+                try(BufferedReader b = new BufferedReader(new FileReader(fileName))) {
+                    for(String l; (l = b.readLine()) != null; ) {
+                        String[] ipPort = l.split(":");
+                        tmpIPs.add(ipPort[0]);
+                        tmpPorts.add(Integer.parseInt(ipPort[1]));
+                    }
+                }   
+                catch (Exception e) {
+                    System.err.println(e.getMessage());
+                }   
+            }
             if (cli.hasOption('t')) {
                 tmpIPs.add(cli.getOptionValue('t'));
             }
 
-			host = new String[tmpPorts.size()];
-			ports = new int[tmpPorts.size()];
+            host = new String[tmpPorts.size()];
+            ports = new int[tmpPorts.size()];
 
-			if (cli.hasOption('t')) {
-				for (int i=0;i < tmpPorts.size(); i++) {
-					host[i] = tmpIPs.get(0);
-				}				
-			} else {
-				for (int i=0;i < tmpPorts.size(); i++) {
-					host[i] = tmpIPs.get(i);
-				}		
-			}
-	
-			for(int i=0; i< tmpPorts.size(); i++) {
-				ports[i] = tmpPorts.get(i);
-			}
+            if (cli.hasOption('t')) {
+                for (int i=0;i < tmpPorts.size(); i++) {
+                    host[i] = tmpIPs.get(0);
+                }               
+            } else {
+                for (int i=0;i < tmpPorts.size(); i++) {
+                    host[i] = tmpIPs.get(i);
+                }       
+            }
+    
+            for(int i=0; i< tmpPorts.size(); i++) {
+                ports[i] = tmpPorts.get(i);
+            }
 
             if (cli.hasOption('d')) {
                 duration = Integer.parseInt(cli.getOptionValue('d'));
@@ -218,14 +218,14 @@ public class MongoBench {
     }
 
     private void doRunPhase(String[] host, int[] ports, int numDocuments, int warmup, int duration, int numThreads, 
-					int reportingInterval, float targetRate, String latencyFilePrefix, int timeouts, boolean sslEnabled) {
+                    int reportingInterval, float targetRate, String latencyFilePrefix, int timeouts, boolean sslEnabled) {
         log.info("Starting {} threads for {} instances", numThreads, ports.length);
         final Map<RunThread, Thread> threads = new HashMap<RunThread, Thread>(numThreads);
         final List<List<String>> slices = createSlices(host, ports, numThreads);
 
         for (int i = 0; i < numThreads; i++) {
             RunThread t = new RunThread(i, slices.get(i), numDocuments, targetRate / (float) numThreads, 
-							latencyFilePrefix, timeouts, sslEnabled);
+                            latencyFilePrefix, timeouts, sslEnabled);
             threads.put(t, new Thread(t));
         }
         for (final Thread t : threads.values()) {
@@ -343,13 +343,13 @@ public class MongoBench {
     private List<List<String>> createSlices(String[] host, int[] ports, int numThreads) {
         final List<List<String>> slices = new ArrayList<List<String>>(numThreads);
         if (ports.length >= numThreads) {
-        	for (int i = 0; i < numThreads; i++) {
-            	slices.add(new ArrayList<String>());
-        	}
-        	for (int i = 0; i < ports.length; i++) {
-            	int sliceIdx = i % numThreads;
-            	slices.get(sliceIdx).add(host[i] + ":" + Integer.toString(ports[i]));
-        	}
+            for (int i = 0; i < numThreads; i++) {
+                slices.add(new ArrayList<String>());
+            }
+            for (int i = 0; i < ports.length; i++) {
+                int sliceIdx = i % numThreads;
+                slices.get(sliceIdx).add(host[i] + ":" + Integer.toString(ports[i]));
+            }
         } else {
             int portIndex = 0;
             for (int i = 0; i < numThreads; i++) {

@@ -33,7 +33,7 @@ public class LoadThread implements Runnable {
 
     private static final Logger log = LoggerFactory.getLogger(LoadThread.class);
 
-    private final List<String> ipPorts;		// A list with "IP:port" enteries
+    private final List<String> ipPorts;     // A list with "IP:port" enteries
     private final int numDocuments;
     private final int docSize;
     private final int maxBatchSize = 1000;
