@@ -54,7 +54,7 @@ public class MongoBench {
         ops.addOption("s", "document-size", true, "The size of the created documents");
         ops.addOption("w", "warmup-time", true, "The number of seconds to wait before actually collecting result data");
         ops.addOption("j", "target-rate", true, "Send request at the given rate. Accepts decimal numbers");
-        ops.addOption("a", "record-latencies", true, "Set the file prefix to which to write latencies to");
+        ops.addOption("a", "record-latencies", true, "Set the file prefix to which to write latencies to of all the DBs");
         ops.addOption("o", "timeout", true, "Set the timeouts in seconds for networking operations");
         ops.addOption("u", "ssl", false, "Use SSL for MongoDB connections");
         ops.addOption("f", "connect-file", false, "Use a connection file with IP:Port lines instead of p and t");
@@ -289,6 +289,16 @@ public class MongoBench {
         log.info("Average transaction rate pre thread: {} transactions/second", decimalFormat.format(avgRatePerThread));
         log.info("Average transaction rate per instance: {} transactions/second", decimalFormat.format(rate / (float) ports.length));
         collectAndReportLatencies(threads.keySet(), elapsed);
+
+        // Write the per DB stats to a file
+        PrintWriter pw = new PrintWriter("/tmp/per_db_stats.txt", "UTF-8");
+        pw.println("Thread host port time tps numRds minRdLat maxRdLat AvgRdLat "
+                        + "numUpdts minUpdtLat maxUpdtLat AvgUpdtLat timeouts");
+        for (Runthread r : threads.keySet()) {
+            r.writeDbStats(pw);
+        }
+
+        log.info("Find the DB stats in /tmp/per_db_stats.txt file");
     }
 
     private void warmup(int warmupInSeconds) {

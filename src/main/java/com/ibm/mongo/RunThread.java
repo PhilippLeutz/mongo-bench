@@ -44,10 +44,10 @@ public class RunThread implements Runnable {
          public long timeouts = 0;
          public long maxReadLatency = 0;
          public long minReadLatency = Long.MAX_VALUE;
-         public long maxWriteLatency = 0;
-         public long minWriteLatency = Long.MAX_VALUE;
+         public long maxUpdateLatency = 0;
+         public long minUpdateLatency = Long.MAX_VALUE;
          public float accReadLatencies = 0;
-         public float accWriteLatencies = 0;
+         public float accUpdateLatencies = 0;
 
         public DbStats(int DbIdx, String host, int port) {
             this.DbIdx = DbIdx;
@@ -61,10 +61,44 @@ public class RunThread implements Runnable {
             timeouts = 0;
             maxReadLatency = 0;
             minReadLatency = Long.MAX_VALUE;
-            maxWriteLatency = 0;
-            minWriteLatency = Long.MAX_VALUE;
+            maxUpdateLatency = 0;
+            minUpdateLatency = Long.MAX_VALUE;
             accReadLatencies = 0;
-            accWriteLatencies = 0;
+            accUpdateLatencies = 0;
+        }
+
+        public void pushNewReadLatency(long readLatency) {
+            numReads++;
+            if (readLatency < minReadLatency) {
+                minReadLatency = readLatency;
+            }
+            if (readLatency > maxReadLatency) {
+                maxReadLatency = readLatency;
+            }
+            accReadLatencies += readLatency;
+        }
+        
+        public void pushNewUpdateLatency(long updateLatency) {
+            numUpdates++;
+            if (updateLatency < minUpdateLatency) {
+                minUpdateLatency = updateLatency;
+            }
+            if (updateLatency > maxUpdateLatency) {
+                maxUpdateLatency = updateLatency;
+            }
+            accUpdateLatencies += updateLatency;
+        }
+        
+        public float getRate(int elapsed) {
+            return ((float) (numUpdates + numReads) * 1000f) / (float) elapsed;
+        }
+
+        public float getAvgReadLatencyMs() {
+            return accReadLatencies/(numReads * 1e6);
+        }
+
+        public float getAvgUpdateLatencyMs() {
+            return accUpdateLatencies/(numUpdates * 1e6);
         }
     }
 
@@ -81,10 +115,10 @@ public class RunThread implements Runnable {
     private String data = RandomStringUtils.randomAlphabetic(1024);
     private long maxReadLatency = 0;
     private long minReadLatency = Long.MAX_VALUE;
-    private long maxWriteLatency = 0;
-    private long minWriteLatency = Long.MAX_VALUE;
+    private long maxUpdateLatency = 0;
+    private long minUpdateLatency = Long.MAX_VALUE;
     private float accReadLatencies = 0;
-    private float accWriteLatencies = 0;
+    private float accUpdateLatencies = 0;
     private AtomicBoolean initialized = new AtomicBoolean(false);
     private final float targetRate;
     private long startMillis;
@@ -246,22 +280,16 @@ public class RunThread implements Runnable {
                 .updateOne(doc, new Document("$set", new Document("data", data)));
         long latency = System.nanoTime() - start;
         recordLatency(latency, insertLatencySink);
-        if (latency < minWriteLatency) {
-            minWriteLatency = latency;
+        if (latency < minUpdateLatency) {
+            minUpdateLatency = latency;
         }
-        if (latency < dbStats[clientIdx].minWriteLatency) {
-            dbStats[clientIdx].minWriteLatency = latency;
+        if (latency > maxUpdateLatency) {
+            maxUpdateLatency = latency;
         }
-        if (latency > maxWriteLatency) {
-            maxWriteLatency = latency;
-        }
-        if (latency > dbStats[clientIdx].maxWriteLatency) {
-            dbStats[clientIdx].maxWriteLatency = latency;
-        }
-        accWriteLatencies += latency;
-        dbStats[clientIdx].accWriteLatencies += latency;
+        
+        accUpdateLatencies += latency;
         numInserts++;
-        dbStats[clientIdx].numUpdates++;
+        dbStats[clientIdx].pushNewUpdateLatency(latency);
     }
 
     private void readRecord(int clientIdx, MongoClient client) throws IOException {
@@ -278,21 +306,15 @@ public class RunThread implements Runnable {
         if (latency > maxReadLatency) {
             maxReadLatency = latency;
         }
-        if (latency < dbStats[clientIdx].minReadLatency) {
-            dbStats[clientIdx].minReadLatency = latency;
-        }
-        if (latency > dbStats[clientIdx].maxReadLatency) {
-            dbStats[clientIdx].maxReadLatency = latency;
-        }
+        
         accReadLatencies += latency;
-        dbStats[clientIdx].accReadLatencies += latency;
         if (fetched == null) {
             log.warn("Thread {} client {} Unable to read document with id {}", 
                             id, clientIdx,
                             doc.get("_id"));
         }
         numReads++;
-        dbStats[clientIdx].numReads++;
+        dbStats[clientIdx].pushNewReadLatency(latency);
     }
 
     private void recordLatency(final long latency, final FileOutputStream sink) throws IOException {
@@ -320,7 +342,7 @@ public class RunThread implements Runnable {
     }
 
     public long getMaxWriteLatency() {
-        return maxWriteLatency;
+        return maxUpdateLatency;
     }
 
     public long getMinReadLatency() {
@@ -328,7 +350,7 @@ public class RunThread implements Runnable {
     }
 
     public long getMinWriteLatency() {
-        return minWriteLatency;
+        return minUpdateLatency;
     }
 
     public float getAccReadLatencies() {
@@ -336,7 +358,7 @@ public class RunThread implements Runnable {
     }
 
     public float getAccWriteLatencies() {
-        return accWriteLatencies;
+        return accUpdateLatencies;
     }
 
 
@@ -349,14 +371,27 @@ public class RunThread implements Runnable {
         numReads = 0;
         maxReadLatency = 0;
         minReadLatency = Long.MAX_VALUE;
-        maxWriteLatency = 0;
-        minWriteLatency = Long.MAX_VALUE;
+        maxUpdateLatency = 0;
+        minUpdateLatency = Long.MAX_VALUE;
         accReadLatencies = 0;
-        accWriteLatencies = 0;
+        accUpdateLatencies = 0;
         startMillis = System.currentTimeMillis();
 
         for(int i=0;i<numDbs;i++) {
             dbStats[i].resetStat();
         }
+    }
+
+    public void writeDbStats(PrintWriter pw) {
+        for(int i=0;i<numDbs;i++) {
+            pw.println("%d %s %d %d %.2f %d %d %d %d %d %d %d %d %d",
+                            id, dbStats[i].host, dbStats[i].port, elapsed/1000, dbStats[i].getRate(elapsed),
+                            dbStats[i].numReads, dbStats[i].minReadLatency,
+                            dbStats[i].maxReadLatency, dbStats[i].getAvgReadLatencyMs(),
+                            dbStats[i].numUpdates, dbStats[i].minUpdateLatency,
+                            dbStats[i].maxUpdateLatency, dbStats[i].getAvgUpdateLatencyMs(),
+                            dbStats[i].timeouts);                           
+        }
+
     }
 }
