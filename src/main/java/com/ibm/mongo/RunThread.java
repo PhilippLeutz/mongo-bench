@@ -55,7 +55,7 @@ public class RunThread implements Runnable {
 			this.port = port;
 		}
 
-		public resetStat() {
+		public void resetStat() {
 			numReads = 0;
         	numUpdates = 0;
 			timeouts = 0;
