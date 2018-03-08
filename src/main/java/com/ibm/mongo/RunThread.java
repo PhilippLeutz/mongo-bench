@@ -123,7 +123,7 @@ public class RunThread implements Runnable {
     public void run() {
         int portsLen = ipPorts.size();
         final MongoClient[] clients = new MongoClient[portsLen];
-        log.info("Opening {} connections", portsLen);
+        log.info("Thread {} opening {} connections", id, portsLen);
         for (int i = 0; i < portsLen; i++) {
             final MongoClientOptions ops = MongoClientOptions.builder()
                     .maxWaitTime(timeoutMs)
@@ -207,7 +207,7 @@ public class RunThread implements Runnable {
             log.error("Error while running benchmark", e);
         }
 
-        log.info("Closing {} connections", clients.length);
+        log.info("Thread {} closing {} connections", id, clients.length);
         for (final MongoClient c : clients) {
             c.close();
         }
@@ -223,7 +223,7 @@ public class RunThread implements Runnable {
             log.error("Unable to close stream", e);
         }
 
-        log.info("Thread finished with {} timeouts", timeouts);
+        log.info("Thread {} finished with {} timeouts", id, timeouts);
     }
 
     private void sleep(long ratePause) {

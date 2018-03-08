@@ -115,6 +115,10 @@ public class MongoBench {
                 }
             }
 			if(cli.hasOption('f')) {
+				 if (cli.hasOption('t')) {
+                 	throw new ParseException("Cannot use -t and -f together");
+                 }
+
 				final String fileName = cli.getOptionValue('f');
 				try(BufferedReader b = new BufferedReader(new FileReader(fileName))) {
 					for(String l; (l = b.readLine()) != null; ) {
@@ -131,11 +135,20 @@ public class MongoBench {
                 tmpIPs.add(cli.getOptionValue('t'));
             }
 
-			host = new String[tmpIPs.size()];
+			host = new String[tmpPorts.size()];
 			ports = new int[tmpPorts.size()];
 
-			for(int i=0; i< tmpIPs.size(); i++) {
-				host[i] = tmpIPs.get(i);
+			if (cli.hasOption('t')) {
+				for (int i=0;i < tmpPorts.size(); i++) {
+					host[i] = tmpIPs.get(0);
+				}				
+			} else {
+				for (int i=0;i < tmpPorts.size(); i++) {
+					host[i] = tmpIPs.get(i);
+				}		
+			}
+	
+			for(int i=0; i< tmpPorts.size(); i++) {
 				ports[i] = tmpPorts.get(i);
 			}
 
