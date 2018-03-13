@@ -17,6 +17,7 @@
 
 package com.ibm.mongo;
 
+import com.mongodb.MongoClientURI;
 import com.mongodb.MongoClient;
 import com.mongodb.MongoClientOptions;
 import com.mongodb.ServerAddress;
@@ -40,15 +41,22 @@ public class LoadThread implements Runnable {
     private final int timeoutMs;
     private final Map<String, Integer> failed = new HashMap<>();
     private final boolean sslEnabled;
+    private final String username;
+    private final String password;
+    private final String replica;
 
     private final static DecimalFormat decimalFormat = new DecimalFormat("0.0000");
 
-    public LoadThread(List<String> ipPorts, int numDocuments, int docSize, int timeout, boolean sslEnabled) {
+    public LoadThread(List<String> ipPorts, int numDocuments, int docSize, int timeout, 
+        boolean sslEnabled, String username, String password, String replica) {
         this.ipPorts = ipPorts;
         this.numDocuments = numDocuments;
         this.docSize = docSize;
         this.timeoutMs = timeout * 1000;
         this.sslEnabled = sslEnabled;
+        this.username = username;
+        this.password = password;
+        this.replica = replica;
     }
 
     @Override
@@ -63,11 +71,35 @@ public class LoadThread implements Runnable {
                     .heartbeatConnectTimeout(timeoutMs)
                     .serverSelectionTimeout(timeoutMs)
                     .sslEnabled(sslEnabled)
+                    .sslInvalidHostNameAllowed(true)
                     .build();
+            String uri;
+            if (!"".equals(username) && !"".equals(password)) {
+                uri = "mongodb://" + username + ":" + password + "@" + ipPorts.get(i) + "/";
+            } else {
+                uri = "mongodb://" + ipPorts.get(i) + "/";
+            }
+
+            if (!"".equals(replica)) {
+                uri = uri + "?replicaSet=" + replica;
+            }
+
+            if (sslEnabled == true) {
+                uri = uri + "&ssl=true";
+            }
+
+            log.info("Database URI {}", uri);
+
+            // MongoClientURI cUri = new MongoClientURI(uri, ops);
+            MongoClientURI cUri = new MongoClientURI(uri, new MongoClientOptions.Builder(ops));
+            MongoClient client = new MongoClient(cUri);
+
+            System.exit(1);
+
             String[] parts = ipPorts.get(i).split(":");
             String host = parts[0];
             int port = Integer.parseInt(parts[1]);
-            MongoClient client = new MongoClient(new ServerAddress(host, port), ops);
+            // MongoClient client = new MongoClient(new ServerAddress(host, port), ops);
             for (final String name : client.listDatabaseNames()) {
                 if (name.equalsIgnoreCase(MongoBench.DB_NAME)) {
                     log.warn("Database {} exists and will be purged before inserting", MongoBench.DB_NAME);
