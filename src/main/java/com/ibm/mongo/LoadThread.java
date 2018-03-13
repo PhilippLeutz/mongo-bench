@@ -81,20 +81,21 @@ public class LoadThread implements Runnable {
             }
 
             if (!"".equals(replica)) {
-                uri = uri + "?replicaSet=" + replica;
+                if (sslEnabled == true) {
+                    uri = uri + "?replicaSet=" + replica + "&ssl=true";
+                } else {
+                    uri = uri + "?replicaSet=" + replica;
+                }
             }
 
-            if (sslEnabled == true) {
-                uri = uri + "&ssl=true";
+            if (sslEnabled == true && "".equals(replica)) {
+                uri = uri + "?ssl=true";
             }
 
             log.info("Database URI {}", uri);
 
-            // MongoClientURI cUri = new MongoClientURI(uri, ops);
             MongoClientURI cUri = new MongoClientURI(uri, new MongoClientOptions.Builder(ops));
             MongoClient client = new MongoClient(cUri);
-
-            System.exit(1);
 
             String[] parts = ipPorts.get(i).split(":");
             String host = parts[0];

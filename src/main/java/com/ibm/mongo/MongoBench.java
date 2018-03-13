@@ -57,10 +57,10 @@ public class MongoBench {
         ops.addOption("a", "record-latencies", true, "Set the file prefix to which to write latencies to of all the DBs");
         ops.addOption("o", "timeout", true, "Set the timeouts in seconds for networking operations");
         ops.addOption("u", "ssl", false, "Use SSL for MongoDB connections");
-        ops.addOption("e", "user", false, "Username for authentication");
-        ops.addOption("k", "password", false, "Password for authentication");
-        ops.addOption("i", "replica-set", false, "Name of the replica set to connect");
-        ops.addOption("f", "connect-file", false, "Use a connection file with IP:Port lines instead of p and t");
+        ops.addOption("e", "user", true, "Username for authentication");
+        ops.addOption("k", "password", true, "Password for authentication");
+        ops.addOption("i", "replica-set", true, "Name of the replica set to connect");
+        ops.addOption("f", "connect-file", true, "Use a connection file with IP:Port lines instead of p and t");
         ops.addOption("h", "help", false, "Show this help dialog");
 
         final CommandLineParser parser = new DefaultParser();
@@ -77,9 +77,9 @@ public class MongoBench {
         String latencyFilePrefix;
         int timeouts;
         boolean sslEnabled;
-        String username = "";
-        String password = "";
-        String replica = "";
+        String username;
+        String password;
+        String replica;
         
         try {
             final CommandLine cli = parser.parse(ops, args);
@@ -203,21 +203,26 @@ public class MongoBench {
             } else {
                 timeouts = 30;
             }
+            if (cli.hasOption('e')) {
+                username = cli.getOptionValue('e');
+            } else {
+                username = "";
+            }
+            if (cli.hasOption('k')) {
+                password = cli.getOptionValue('k');
+            } else {
+                password = "";
+            }
+            if (cli.hasOption('i')) {
+                replica = cli.getOptionValue('i');
+            } else {
+                replica = "";
+            }
             if (cli.hasOption('u')) {
                 sslEnabled = true;
             } else {
                 sslEnabled = false;
             }
-            if (cli.hasOption('e')) {
-                username = cli.getOptionValue('e');
-            }
-            if (cli.hasOption('k')) {
-                password = cli.getOptionValue('k');
-            }
-            if (cli.hasOption('i')) {
-                replica = cli.getOptionValue('i');
-            }
-
             log.info("Running phase {}", phase.name());
 
             final MongoBench bench = new MongoBench();
@@ -409,6 +414,7 @@ public class MongoBench {
         int documentSize, int timeouts, boolean sslEnabled, String username, String password, String replica) {
         final Map<LoadThread, Thread> threads = new HashMap<LoadThread, Thread>(numThreads);
         final List<List<String>> slices = createSlices(host, ports, numThreads);
+
         for (int i = 0; i < numThreads; i++) {
             LoadThread l = new LoadThread(slices.get(i), numDocuments, documentSize, timeouts, sslEnabled,
                 username, password, replica);
