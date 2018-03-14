@@ -12,34 +12,58 @@ The benchmark is a Java project build with Apache Maven. In order to build the p
 ## Usage
 
 The benchmark is written in Java and at least Java version 6 is required to run the generated jar file. Since a lot of latency data is recorded per thread, large amounts of memory are needed and the benchmark has to be run with a larger than normal heapsize during the run phase.
-
-    usage: java -jar mongo-bench-1.0-SNAPSHOT-jar-with-dependencies.jar [options]
+usage: java -jar mongo-bench-1.1-beta-SNAPSHOT-jar-with-dependencies.jar
+[options]
 
     Options:
+     -a,--record-latencies <arg>     Set the file prefix to which to write latencies to of all the DBs
      -c,--num-documents <arg>        The number of documents to create during the load phase
      -d,--duration <arg>             Run the bench for this many seconds
-     -h,--help                       Show this help dialogue
+     -e,--user <arg>                 Username for authentication
+     -f,--connect-file <arg>         Use a connection file with IP:Port lines instead of p and t
+     -h,--help                       Show this help dialog
+     -i,--replica-set <arg>          Name of the replica set to connect
      -j,--target-rate <arg>          Send request at the given rate. Accepts decimal numbers
+     -k,--password <arg>             Password for authentication
      -l,--phase <arg>                The phase to execute [run|load]
      -n,--num-thread <arg>           The number of threads to run
+     -o,--timeout <arg>              Set the timeouts in seconds for networking operations
      -p,--port <arg>                 The ports to connect to
      -r,--reporting-interval <arg>   The interval in seconds for reporting progress
      -s,--document-size <arg>        The size of the created documents
-     -t,--target  <arg>              The target host to connect to
+     -t,--target  <arg>              The target single host to connect to
+     -u,--ssl                        Use SSL for MongoDB connections
      -w,--warmup-time <arg>          The number of seconds to wait before actually collecting result data
-
-    The benchmark is split into two phases: Load and Run. Random data is added during the load phase which is in turn
-    retrieved from MongoDB in the run phase.
-
+    
+    The benchmark is split into two phases: Load and Run. Random data is added
+    during the load phase which is in turn retrieved from mongodb in the run phase.
 
 ### Examples
 Loading `1000` documents of size `1024` bytes each into MongoDB instances on ports `30001-30010` on `9.114.14.14` using `8` threads:
 ```bash
-#> java -jar /tmp/mongo-bench-1.0-SNAPSHOT-jar-with-dependencies.jar -s 1024 -c 1000 -l load -p 30001-30010 -t 9.114.14.14 -n 8
+#> java -jar /tmp/mongo-bench-1.0-SNAPSHOT-jar-with-dependencies.jar -s 1024 \
+-c 1000 -l load -p 30001-30010 -t 9.114.14.14 -n 8
 ```
 
+---
+Loading `1000` documents of size `1024` bytes into a MongoDB instance on port
+`20401` on `10.1.9.199` using `1` thread, replica-set name `usman1`, SSL and
+authorization username and password `usman`:
+```bash
+#> java -Djavax.net.ssl.trustStore=/home/usman/cluster_keystore.jks \
+-Djavax.net.ssl.trustStorePassword=changeit -Djavax.net.ssl.debug=all -jar \
+target/mongo-bench-1.1-beta-SNAPSHOT-jar-with-dependencies.jar -s 1024 -c 1000 \
+-l load -p 20401 -t 10.1.9.199 -n 1 -u -e usman -k usman -i usman1
+```
 
+Of course, you would need to import the certificate and add it to a `keystore`,
+for java to read. 
+
+
+---
 Running the benchmark against ports `30001-30010` on the box `9.114.14.14` using 4 threads for `600` seconds with a `60` second warmup time and target an overall rate of `1000` transactions/second:
 ```bash
-#> java -Xmx16384m -jar /tmp/mongo-bench-1.0-SNAPSHOT-jar-with-dependencies.jar -l run -p 30001-30010 -t 9.114.14.14 -n 4 -w 60 -d 600 -j 1000
+#> java -Xmx16384m -jar /tmp/mongo-bench-1.0-SNAPSHOT-jar-with-dependencies.jar \
+-l run -p 30001-30010 -t 9.114.14.14 -n 4 -w 60 -d 600 -j 1000
 ```
+
