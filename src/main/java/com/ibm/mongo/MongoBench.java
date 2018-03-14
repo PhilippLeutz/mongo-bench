@@ -60,7 +60,7 @@ public class MongoBench {
         ops.addOption("e", "user", true, "Username for authentication");
         ops.addOption("k", "password", true, "Password for authentication");
         ops.addOption("i", "replica-set", true, "Name of the replica set to connect");
-        ops.addOption("f", "connect-file", true, "Use a connection file with IP:Port lines instead of p and t");
+        ops.addOption("f", "connect-file", true, "Use a connection file with each line containing MongoDB URI"); 
         ops.addOption("h", "help", false, "Show this help dialog");
 
         final CommandLineParser parser = new DefaultParser();
@@ -77,9 +77,7 @@ public class MongoBench {
         String latencyFilePrefix;
         int timeouts;
         boolean sslEnabled;
-        String username;
-        String password;
-        String replica;
+        final String[] mongoUri;
         
         try {
             final CommandLine cli = parser.parse(ops, args);
@@ -99,8 +97,12 @@ public class MongoBench {
                 throw new ParseException("No phase given. Try \"--help/-h\"");
             }
            
-            final List<String> tmpIPs = new ArrayList<String>();
-            final List<Integer> tmpPorts = new ArrayList<Integer>();
+            final String tmpIP;
+            final Integer tmpPort;
+            final String tmpUser;
+            final String tmpPassword;
+            final String tmpReplica;
+            final List<String> tmpMongoUri = new ArrayList<String>();
 
             if (cli.hasOption('p')) {
                 final String portVal = cli.getOptionValue('p');
@@ -120,40 +122,86 @@ public class MongoBench {
                     }
                 }
             }
+            if (cli.hasOption('u')) {
+                sslEnabled = true;
+            } else {
+                sslEnabled = false;
+            }
             if(cli.hasOption('f')) {
-                 if (cli.hasOption('t')) {
+                if (cli.hasOption('t')) {
                     throw new ParseException("Cannot use -t and -f together");
-                 }
+                }
+                if (cli.hasOption('p')) {
+                    throw new ParseException("Cannot use -p and -f together");
+                }
+                if (cli.hasOption('e')) {
+                    throw new ParseException("Cannot use -e and -f together");
+                }
+                if (cli.hasOption('k')) {
+                    throw new ParseException("Cannot use -k and -f together");
+                }
+                if (cli.hasOption('i')) {
+                    throw new ParseException("Cannot use -i and -f together");
+                }
 
                 final String fileName = cli.getOptionValue('f');
                 try(BufferedReader b = new BufferedReader(new FileReader(fileName))) {
                     for(String l; (l = b.readLine()) != null; ) {
-                        String[] ipPort = l.split(":");
-                        tmpIPs.add(ipPort[0]);
-                        tmpPorts.add(Integer.parseInt(ipPort[1]));
+                        tmpMongoUri.add(l);
                     }
                 }   
                 catch (Exception e) {
                     System.err.println(e.getMessage());
                 }   
-            }
-            if (cli.hasOption('t')) {
-                tmpIPs.add(cli.getOptionValue('t'));
+            } else {
+                if (cli.hasOption('t')) {
+                    tmpIP = cli.getOptionValue('t');
+                }
+                if (cli.hasOption('e')) {
+                    tmpUser = cli.getOptionValue('e');
+                } else {
+                    tmpUser = "";
+                }
+                if (cli.hasOption('k')) {
+                    tmpPassword = cli.getOptionValue('k');
+                } else {
+                    tmpPassword = "";
+                }
+                if (cli.hasOption('i')) {
+                    tmpReplica = cli.getOptionValue('i');
+                } else {
+                    tmpReplica = "";
+                }
+
+                for(int i=0;i<tmpPorts.size();i++) {
+                    tmpMongoUri.add(MongoURI.createURI(tmpIP, tmpPorts.get(i), tmpUser, tmpPassword,
+                                    tmpReplica, sslEnabled));
+                }
             }
 
             host = new String[tmpPorts.size()];
             ports = new int[tmpPorts.size()];
-
-            if (cli.hasOption('t')) {
-                for (int i=0;i < tmpPorts.size(); i++) {
-                    host[i] = tmpIPs.get(0);
-                }               
-            } else {
-                for (int i=0;i < tmpPorts.size(); i++) {
+            username = new String[tmpPorts.size()];
+            password = new String[tmpPorts.size()];
+            replica = new String[tmpPorts.size()];
+            
+            if(!cli.hasOptions('f')) {
+                for(int i=0;i < tmpPorts.size(); i++) {
                     host[i] = tmpIPs.get(i);
-                }       
+                    username[i] = tmpUsers.get(i);
+                    password[i] = tmpPasswords.get(i);
+                    replica[i] = tmpReplicas.get(i);
+                }
+            } else {
+                for(int i=0;i < tmpPorts.size(); i++) {
+                    host[i] = tmpIPs.get(0);
+                    username[i] = tmpUsers.get(0);
+                    password[i] = tmpPasswords.get(0);
+                    replica[i] = tmpReplicas.get(0);
+                }
             }
-    
+
+                
             for(int i=0; i< tmpPorts.size(); i++) {
                 ports[i] = tmpPorts.get(i);
             }
@@ -203,26 +251,7 @@ public class MongoBench {
             } else {
                 timeouts = 30;
             }
-            if (cli.hasOption('e')) {
-                username = cli.getOptionValue('e');
-            } else {
-                username = "";
-            }
-            if (cli.hasOption('k')) {
-                password = cli.getOptionValue('k');
-            } else {
-                password = "";
-            }
-            if (cli.hasOption('i')) {
-                replica = cli.getOptionValue('i');
-            } else {
-                replica = "";
-            }
-            if (cli.hasOption('u')) {
-                sslEnabled = true;
-            } else {
-                sslEnabled = false;
-            }
+
             log.info("Running phase {}", phase.name());
 
             final MongoBench bench = new MongoBench();
@@ -243,7 +272,7 @@ public class MongoBench {
                     String username, String password, String replica) {
         log.info("Starting {} threads for {} instances", numThreads, ports.length);
         final Map<RunThread, Thread> threads = new HashMap<RunThread, Thread>(numThreads);
-        final List<List<String>> slices = createSlices(host, ports, numThreads);
+        final List<List<String>> slices = createSlices(host, ports, username, password, replica, numThreads);
 
         for (int i = 0; i < numThreads; i++) {
             RunThread t = new RunThread(i, slices.get(i), numDocuments, targetRate / (float) numThreads, 
@@ -377,7 +406,8 @@ public class MongoBench {
                 decimalFormat.format(maxWriteLatency / 1000000f), decimalFormat.format(avgWriteLatency / 1000000f));
     }
 
-    private List<List<String>> createSlices(String[] host, int[] ports, int numThreads) {
+    private List<List<String>> createSlices(String[] host, int[] ports, String[] username, 
+                                    String[] password, String[] replica, int numThreads) {
         final List<List<String>> slices = new ArrayList<List<String>>(numThreads);
         if (ports.length >= numThreads) {
             for (int i = 0; i < numThreads; i++) {
@@ -385,7 +415,8 @@ public class MongoBench {
             }
             for (int i = 0; i < ports.length; i++) {
                 int sliceIdx = i % numThreads;
-                slices.get(sliceIdx).add(host[i] + ":" + Integer.toString(ports[i]));
+                slices.get(sliceIdx).add(host[i] + ":" + Integer.toString(ports[i]) + "," + 
+                                        username[i] + "," + password[i] + "," + replica[i]);
             }
         } else {
             int portIndex = 0;
@@ -397,7 +428,9 @@ public class MongoBench {
                 } else {
                     conTmp = slices.get(i);
                 }
-                conTmp.add(host[portIndex] + ":" + Integer.toString(ports[portIndex++]));
+                conTmp.add(host[portIndex] + ":" + Integer.toString(ports[portIndex]) + "," +
+                            username[portIndex] + "," + password[portIndex] + "," + replica[portIndex]);
+                portIndex++;
                 if (portIndex == ports.length) {
                     portIndex = 0;
                 }
@@ -412,9 +445,9 @@ public class MongoBench {
 
 
     private void doLoadPhase(String[] host, int[] ports, int numThreads, int numDocuments, 
-        int documentSize, int timeouts, boolean sslEnabled, String username, String password, String replica) {
+        int documentSize, int timeouts, boolean sslEnabled, String[] username, String[] password, String[] replica) {
         final Map<LoadThread, Thread> threads = new HashMap<LoadThread, Thread>(numThreads);
-        final List<List<String>> slices = createSlices(host, ports, numThreads);
+        final List<List<String>> slices = createSlices(host, ports, username, password, replica, numThreads);
 
         for (int i = 0; i < numThreads; i++) {
             LoadThread l = new LoadThread(slices.get(i), numDocuments, documentSize, timeouts, sslEnabled,
