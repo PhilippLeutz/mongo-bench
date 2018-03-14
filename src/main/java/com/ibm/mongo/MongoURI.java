@@ -21,26 +21,25 @@ import com.mongodb.MongoClientURI;
 import com.mongodb.MongoClientOptions;
 
 public final class MongoURI {
-    public List<String> host;
-    public String username;
-    public String password;
-    public String replica;
-    public boolean isSSLEnabled;
+    public static List<String> host = new ArrayList<String>();
+    public static String username;
+    public static String password;
+    public static String replica;
+    public static boolean isSSLEnabled;
 
     private MongoURI() {
-        host = "xxxx";
         username = "xxxx";
         password = "xxxx";
         replica = "xxxx";
         isSSLEnabled = false;
     }
 
-    private static void parseUri(String uri) {
-        MongoClientURI clientUri = new MongoClientURI(uri);
-        host = clientUri.getHosts();
-        username = clientUri.getUsername();
-        password = clientUri.getPassword();
-        replica = clientUri.getOptions().getRequiredReplicaSetName();
+    private static void parseURI(String uri) {
+        MongoClientURI clientURI = new MongoClientURI(uri);
+        host = clientURI.getHosts();
+        username = clientURI.getUsername();
+        password = new String(clientURI.getPassword());
+        replica = clientURI.getOptions().getRequiredReplicaSetName();
         isSSLEnabled = uri.toLowerCase().contains("ssl");
     }
 
