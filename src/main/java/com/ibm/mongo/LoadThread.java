@@ -34,35 +34,34 @@ public class LoadThread implements Runnable {
 
     private static final Logger log = LoggerFactory.getLogger(LoadThread.class);
 
-    private final List<String> ipPorts;     // A list with "IP:port" enteries
+    private final List<String> mongoUri;     // A list with MongoDB URI enteries
     private final int numDocuments;
     private final int docSize;
     private final int maxBatchSize = 1000;
     private final int timeoutMs;
     private final Map<String, Integer> failed = new HashMap<>();
-    private final boolean sslEnabled;
-    private final String username;
-    private final String password;
-    private final String replica;
-
     private final static DecimalFormat decimalFormat = new DecimalFormat("0.0000");
 
-    public LoadThread(List<String> ipPorts, int numDocuments, int docSize, int timeout, 
-        boolean sslEnabled, String username, String password, String replica) {
-        this.ipPorts = ipPorts;
+    public LoadThread(List<String> mongoUri, int numDocuments, int docSize, int timeout) {
+        this.mongoUri = mongoUri;
         this.numDocuments = numDocuments;
         this.docSize = docSize;
         this.timeoutMs = timeout * 1000;
-        this.sslEnabled = sslEnabled;
-        this.username = username;
-        this.password = password;
-        this.replica = replica;
     }
 
     @Override
     public void run() {
-        log.info("Loading data into {} instances", ipPorts.size());
-        for (int i = 0; i < ipPorts.size(); i++) {
+        log.info("Loading data into {} instances", mongoUri.size());
+        for (int i = 0; i < mongoUri.size(); i++) {
+            String uri = mongoUri.size();
+            log.info("Database URI {}", uri);
+            
+            List<String> host = MongoURI.parse(uri).host;
+            String username = MongoURI.parse(uri).username;
+            String password = MongoURI.parse(uri).password;
+            String replica = MongoURI.parse(uri).replica;
+            boolean sslEnabled = MongoURI.parse(uri).isSSLEnabled;
+
             int count = 0, currentBatchSize;
             final MongoClientOptions ops = MongoClientOptions.builder()
                     .maxWaitTime(timeoutMs)
@@ -73,34 +72,10 @@ public class LoadThread implements Runnable {
                     .sslEnabled(sslEnabled)
                     .sslInvalidHostNameAllowed(true)
                     .build();
-            String uri;
-            if (!"".equals(username) && !"".equals(password)) {
-                uri = "mongodb://" + username + ":" + password + "@" + ipPorts.get(i) + "/";
-            } else {
-                uri = "mongodb://" + ipPorts.get(i) + "/";
-            }
-
-            if (!"".equals(replica)) {
-                if (sslEnabled == true) {
-                    uri = uri + "?replicaSet=" + replica + "&ssl=true";
-                } else {
-                    uri = uri + "?replicaSet=" + replica;
-                }
-            }
-
-            if (sslEnabled == true && "".equals(replica)) {
-                uri = uri + "?ssl=true";
-            }
-
-            log.info("Database URI {}", uri);
 
             MongoClientURI cUri = new MongoClientURI(uri, new MongoClientOptions.Builder(ops));
             MongoClient client = new MongoClient(cUri);
 
-            String[] parts = ipPorts.get(i).split(":");
-            String host = parts[0];
-            int port = Integer.parseInt(parts[1]);
-            
             for (final String name : client.listDatabaseNames()) {
                 if (name.equalsIgnoreCase(MongoBench.DB_NAME)) {
                     log.warn("Database {} exists and will be purged before inserting", MongoBench.DB_NAME);
@@ -116,8 +91,8 @@ public class LoadThread implements Runnable {
                 try {
                     collection.insertMany(Arrays.asList(docs));
                 } catch (Exception e) {
-                    log.error("Error while inserting {} documents at {}:{}", currentBatchSize, host, port);
-                    log.warn("Checking connection to {}:{}", host, port);
+                    log.error("Error while inserting {} documents at {}", currentBatchSize, host);
+                    log.warn("Checking connection to {}", host);
                     boolean connected = false;
                     try {
                         while (!connected) {
@@ -128,7 +103,7 @@ public class LoadThread implements Runnable {
                     } catch (Exception ie) {
                         log.error("No connection to {}:{}. Reconnecting...");
                         client.close();
-                        client = new MongoClient(new ServerAddress(host, port), ops);
+                        client = new MongoClient(cUri);
                     }
                 }
                 count += currentBatchSize;
@@ -145,7 +120,7 @@ public class LoadThread implements Runnable {
                 }
                 log.error("Overall {} inserts failed", numFailed);
             }
-            log.info("Finished loading {} documents in {}:{} [{} inserts/sec]", count, host, port, rate);
+            log.info("Finished loading {} documents in {} [{} inserts/sec]", count, host, rate);
         }
     }
 
