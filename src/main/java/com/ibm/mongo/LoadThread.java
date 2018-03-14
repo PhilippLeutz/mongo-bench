@@ -100,7 +100,7 @@ public class LoadThread implements Runnable {
             String[] parts = ipPorts.get(i).split(":");
             String host = parts[0];
             int port = Integer.parseInt(parts[1]);
-            // MongoClient client = new MongoClient(new ServerAddress(host, port), ops);
+            
             for (final String name : client.listDatabaseNames()) {
                 if (name.equalsIgnoreCase(MongoBench.DB_NAME)) {
                     log.warn("Database {} exists and will be purged before inserting", MongoBench.DB_NAME);

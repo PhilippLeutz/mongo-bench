@@ -136,9 +136,14 @@ public class RunThread implements Runnable {
     private final boolean sslEnabled;
     private DbStats[] dbStats;
     private Random rand;
+    private final String username;
+    private final String password;
+    private final String replica;
+
 
     public RunThread(int id, List<String> ipPorts, int numDocuments, float targetRate, 
-                    String prefixLatencyFile, int timeout, boolean sslEnabled) {
+                    String prefixLatencyFile, int timeout, boolean sslEnabled,
+                    String username, String password, String replica) {
         this.id = id;
         this.ipPorts = ipPorts;
         this.numDbs = ipPorts.size();
@@ -147,7 +152,10 @@ public class RunThread implements Runnable {
         this.prefixLatencyFile = prefixLatencyFile;
         this.timeoutMs = timeout * 1000;
         this.sslEnabled = sslEnabled;
-        
+        this.username = username;
+        this.password = password;
+        this.replica = replica;
+
         rand = new Random();
         
         dbStats = new DbStats[numDbs];
@@ -172,9 +180,30 @@ public class RunThread implements Runnable {
                     .serverSelectionTimeout(timeoutMs)
                     .sslEnabled(sslEnabled)
                     .build();
-            String host = dbStats[i].host;
-            int port = dbStats[i].port;
-            clients[i] = new MongoClient(new ServerAddress(host, port), ops);
+
+            String uri;
+            if (!"".equals(username) && !"".equals(password)) {
+                uri = "mongodb://" + username + ":" + password + "@" + ipPorts.get(i) + "/";
+            } else {
+                uri = "mongodb://" + ipPorts.get(i) + "/";
+            }
+
+            if (!"".equals(replica)) {
+                if (sslEnabled == true) {
+                    uri = uri + "?replicaSet=" + replica + "&ssl=true";
+                } else {
+                    uri = uri + "?replicaSet=" + replica;
+                }
+            }
+
+            if (sslEnabled == true && "".equals(replica)) {
+                uri = uri + "?ssl=true";
+            }
+
+            log.info("Thread {} connecting to database URI {}", id, uri);
+
+            MongoClientURI cUri = new MongoClientURI(uri, new MongoClientOptions.Builder(ops));
+            clients[i] = new MongoClient(cUri);
         }
 
         if (prefixLatencyFile != null) {

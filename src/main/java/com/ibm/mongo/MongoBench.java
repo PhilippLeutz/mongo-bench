@@ -231,7 +231,7 @@ public class MongoBench {
                     username, password, replica);
             } else {
                 bench.doRunPhase(host, ports, numDocuments, warmup, duration, numThreads, reportingInterval, 
-                    rateLimit, latencyFilePrefix, timeouts, sslEnabled);
+                    rateLimit, latencyFilePrefix, timeouts, sslEnabled, username, password, replica);
             }
         } catch (ParseException e) {
             log.error("Unable to parse", e);
@@ -239,14 +239,15 @@ public class MongoBench {
     }
 
     private void doRunPhase(String[] host, int[] ports, int numDocuments, int warmup, int duration, int numThreads, 
-                    int reportingInterval, float targetRate, String latencyFilePrefix, int timeouts, boolean sslEnabled) {
+                    int reportingInterval, float targetRate, String latencyFilePrefix, int timeouts, boolean sslEnabled,
+                    String username, String password, String replica) {
         log.info("Starting {} threads for {} instances", numThreads, ports.length);
         final Map<RunThread, Thread> threads = new HashMap<RunThread, Thread>(numThreads);
         final List<List<String>> slices = createSlices(host, ports, numThreads);
 
         for (int i = 0; i < numThreads; i++) {
             RunThread t = new RunThread(i, slices.get(i), numDocuments, targetRate / (float) numThreads, 
-                            latencyFilePrefix, timeouts, sslEnabled);
+                            latencyFilePrefix, timeouts, sslEnabled, username, password, replica);
             threads.put(t, new Thread(t));
         }
         for (final Thread t : threads.values()) {
