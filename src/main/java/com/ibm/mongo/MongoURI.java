@@ -51,7 +51,10 @@ public final class MongoURI {
             uri = uri + username + ":" + password + "@";
         } 
         
-        uri = uri + host + "/";
+        uri = (uri + host.toString().replace(", ", ",")
+                                    .replace("[", "")
+                                    .replace("]", "")
+                                     + "/");
         
         if (!"".equals(replica)) {
             uri = uri + "?replicaSet=" + replica;
