@@ -34,30 +34,44 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 
+/**
+ * RunThread for MongoDB benchmarking.
+ * This class runs the logic for stressing the DBs.
+ */
 public class RunThread implements Runnable {
 
     /**
-     * DBStats.
+     * DB Statistics holder.
      * This class holds the statistics for a particular DB.
      */
     private class DbStats {
-         public long DbIdx = 0;
-         public String host;
-         public int port = 0;
-         public long numReads = 0;
-         public long numUpdates = 0;
-         public long timeouts = 0;
-         public long maxReadLatency = 0;
-         public long minReadLatency = Long.MAX_VALUE;
-         public long maxUpdateLatency = 0;
-         public long minUpdateLatency = Long.MAX_VALUE;
-         public float accReadLatencies = 0;
-         public float accUpdateLatencies = 0;
+        public long DbIdx = 0;
+        public String uri;
+        public List<String> host;
+        public String username;
+        public String password;
+        public String replica;
+        public boolean sslEnabled;
 
-        public DbStats(int DbIdx, String host, int port) {
+        public long numReads = 0;
+        public long numUpdates = 0;
+        public long timeouts = 0;
+        public long maxReadLatency = 0;
+        public long minReadLatency = Long.MAX_VALUE;
+        public long maxUpdateLatency = 0;
+        public long minUpdateLatency = Long.MAX_VALUE;
+        public float accReadLatencies = 0;
+        public float accUpdateLatencies = 0;
+
+        public DbStats(int DbIdx, String uri) {
             this.DbIdx = DbIdx;
-            this.host = host;
-            this.port = port;
+            this.uri = uri;
+            MongoURI.parseURI(uri);
+            this.host = MongoURI.host;
+            this.username = MongoURI.username;
+            this.password = MongoURI.password;
+            this.replica = MongoURI.replica;
+            this.sslEnabled = MongoURI.isSSLEnabled;
         }
 
         public void resetStat() {
@@ -105,6 +119,10 @@ public class RunThread implements Runnable {
         public double getAvgUpdateLatencyMs() {
             return accUpdateLatencies/(numUpdates * 1e6);
         }
+
+        public String hostList() {
+            return host.toString().replace(", ", ",");
+        }
     }
 
     private static final Logger log = LoggerFactory.getLogger(RunThread.class);
@@ -116,7 +134,6 @@ public class RunThread implements Runnable {
     private int numDbs = 0;
     private int numInserts = 0;
     private int numReads = 0;
-    private final List<String> ipPorts; // @todo This might not be required.
     private String data = RandomStringUtils.randomAlphabetic(1024);
     private long maxReadLatency = 0;
     private long minReadLatency = Long.MAX_VALUE;
@@ -133,45 +150,37 @@ public class RunThread implements Runnable {
     private String lineSeparator = System.getProperty("line.separator");
     private String prefixLatencyFile;
     private int timeoutMs;
-    private final boolean sslEnabled;
     private DbStats[] dbStats;
     private Random rand;
-    private final String username;
-    private final String password;
-    private final String replica;
+    private List<String> mongoUri;
 
-
-    public RunThread(int id, List<String> ipPorts, int numDocuments, float targetRate, 
-                    String prefixLatencyFile, int timeout, boolean sslEnabled,
-                    String username, String password, String replica) {
+    public RunThread(int id, List<String> mongoUri, int numDocuments, float targetRate, 
+                    String prefixLatencyFile, int timeout) {
         this.id = id;
-        this.ipPorts = ipPorts;
-        this.numDbs = ipPorts.size();
+        this.mongoUri = mongoUri;
+        this.numDbs = mongoUri.size();
         this.numDocuments = numDocuments;
         this.targetRate = targetRate;
         this.prefixLatencyFile = prefixLatencyFile;
         this.timeoutMs = timeout * 1000;
-        this.sslEnabled = sslEnabled;
-        this.username = username;
-        this.password = password;
-        this.replica = replica;
-
+        
         rand = new Random();
         
         dbStats = new DbStats[numDbs];
-        for(int i = 0;i < numDbs; i++) {
-            String[] parts = ipPorts.get(i).split(":");
-            dbStats[i] = new DbStats(i, parts[0], Integer.parseInt(parts[1]));
-        }
     }
 
 
     @Override
     public void run() {
-        int portsLen = ipPorts.size();
-        final MongoClient[] clients = new MongoClient[portsLen];
-        log.info("Thread {} opening {} connections", id, portsLen);
-        for (int i = 0; i < portsLen; i++) {
+        final MongoClient[] clients = new MongoClient[numDbs];
+        log.info("Thread {} opening {} connections", id, numDbs);
+        for (int i = 0; i < numDbs; i++) {
+            String uri = mongoUri.get(i);
+            MongoURI.parseURI(uri);
+            boolean sslEnabled = MongoURI.isSSLEnabled;
+
+            dbStats[i] = new DbStats(i, uri);
+
             final MongoClientOptions ops = MongoClientOptions.builder()
                     .maxWaitTime(timeoutMs)
                     .connectTimeout(timeoutMs)
@@ -180,25 +189,6 @@ public class RunThread implements Runnable {
                     .serverSelectionTimeout(timeoutMs)
                     .sslEnabled(sslEnabled)
                     .build();
-
-            String uri;
-            if (!"".equals(username) && !"".equals(password)) {
-                uri = "mongodb://" + username + ":" + password + "@" + ipPorts.get(i) + "/";
-            } else {
-                uri = "mongodb://" + ipPorts.get(i) + "/";
-            }
-
-            if (!"".equals(replica)) {
-                if (sslEnabled == true) {
-                    uri = uri + "?replicaSet=" + replica + "&ssl=true";
-                } else {
-                    uri = uri + "?replicaSet=" + replica;
-                }
-            }
-
-            if (sslEnabled == true && "".equals(replica)) {
-                uri = uri + "?ssl=true";
-            }
 
             log.info("Thread {} connecting to database URI {}", id, uri);
 
@@ -215,6 +205,7 @@ public class RunThread implements Runnable {
             }
         }
 
+        // Required for randomizing the accesses to the DBs
         List<Integer> clientList = new ArrayList<Integer>();
         for(int i=0;i<clients.length;i++) {
             clientList.add(i);
@@ -428,13 +419,13 @@ public class RunThread implements Runnable {
 
     public void writeDbStats(PrintWriter pw) {
         for(int i=0;i<numDbs;i++) {
-            pw.format(Locale.US, "%d %s %d %d %.2f %d %d %d %.2f %d %d %d %.2f %d",
-                            id, dbStats[i].host, dbStats[i].port, elapsed/1000, dbStats[i].getRate(elapsed),
+            pw.format(Locale.US, "%d %d %.2f %d %d %d %.2f %d %d %d %.2f %d %s",
+                            id, elapsed/1000, dbStats[i].getRate(elapsed),
                             dbStats[i].numReads, dbStats[i].minReadLatency,
                             dbStats[i].maxReadLatency, dbStats[i].getAvgReadLatencyMs(),
                             dbStats[i].numUpdates, dbStats[i].minUpdateLatency,
                             dbStats[i].maxUpdateLatency, dbStats[i].getAvgUpdateLatencyMs(),
-                            dbStats[i].timeouts);                          
+                            dbStats[i].timeouts, dbStats[i].uri);                          
             pw.println(); 
         }
 
