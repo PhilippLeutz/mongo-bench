@@ -61,6 +61,7 @@ public class MongoBench {
         ops.addOption("k", "password", true, "Password for authentication");
         ops.addOption("i", "replica-set", true, "Name of the replica set to connect");
         ops.addOption("f", "connect-file", true, "Use a connection file with each line containing MongoDB URI"); 
+        ops.addOption("q", "query", false, "Search for data starting with \"lr\" case insentive rather than read/write"); 
         ops.addOption("h", "help", false, "Show this help dialog");
 
         final CommandLineParser parser = new DefaultParser();
@@ -76,6 +77,7 @@ public class MongoBench {
         String latencyFilePrefix;
         int timeouts;
         boolean sslEnabled;
+        boolean isQuery = false;
         final String[] mongoUri;
         
         try {
@@ -240,6 +242,9 @@ public class MongoBench {
             } else {
                 timeouts = 30;
             }
+            if (cli.hasOption('q')) {   // Query
+                isQuery = true;
+            }
 
             log.info("Running phase {}", phase.name());
 
@@ -248,7 +253,7 @@ public class MongoBench {
                 bench.doLoadPhase(mongoUri, numThreads, numDocuments, documentSize, timeouts);
             } else {
                 bench.doRunPhase(mongoUri, numDocuments, warmup, duration, numThreads, reportingInterval, 
-                    rateLimit, latencyFilePrefix, timeouts);
+                    rateLimit, latencyFilePrefix, timeouts, isQuery);
             }
         } catch (ParseException e) {
             log.error("Unable to parse", e);
@@ -256,14 +261,14 @@ public class MongoBench {
     }
 
     private void doRunPhase(String[] mongoUri, int numDocuments, int warmup, int duration, int numThreads, 
-                    int reportingInterval, float targetRate, String latencyFilePrefix, int timeouts) {
+                    int reportingInterval, float targetRate, String latencyFilePrefix, int timeouts, boolean isQuery) {
         log.info("Starting {} threads for {} instances", numThreads, mongoUri.length);
         final Map<RunThread, Thread> threads = new HashMap<RunThread, Thread>(numThreads);
         final List<List<String>> slices = createSlices(mongoUri, numThreads);
 
         for (int i = 0; i < numThreads; i++) {
             RunThread t = new RunThread(i, slices.get(i), numDocuments, targetRate / (float) numThreads, 
-                            latencyFilePrefix, timeouts);
+                            latencyFilePrefix, timeouts, isQuery);
             threads.put(t, new Thread(t));
         }
         for (final Thread t : threads.values()) {
@@ -315,14 +320,17 @@ public class MongoBench {
         float avgRatePerThread = 0f;
         long numReads = 0;
         long numInserts = 0;
+        long numQueries = 0;
         for (final RunThread r : threads.keySet()) {
             avgRatePerThread += r.getRate();
             numInserts += r.getNumInserts();
             numReads += r.getNumReads();
+            numQueries += r.getNumQueries();
         }
-        float rate = (float) (numReads + numInserts) * 1000f / (float) elapsed;
+        float rate = (float) (numReads + numInserts + numQueries) * 1000f / (float) elapsed;
         avgRatePerThread = avgRatePerThread / (float) numThreads;
-        log.info("Read {} and inserted {} documents in {} secs", numReads, numInserts, decimalFormat.format((float) elapsed / 1000f));
+        log.info("Read {}, updated {} and queried {} documents in {} secs", 
+            numReads, numInserts, numQueries, decimalFormat.format((float) elapsed / 1000f));
         log.info("Overall transaction rate: {} transactions/second", decimalFormat.format(rate));
         log.info("Average transaction rate per thread: {} transactions/second", decimalFormat.format(avgRatePerThread));
         log.info("Average transaction rate per instance: {} transactions/second", decimalFormat.format(rate / (float) mongoUri.length));
@@ -332,7 +340,8 @@ public class MongoBench {
         try {
             PrintWriter pw = new PrintWriter("/tmp/per_db_stats.txt", "UTF-8");
             pw.println("Thread time[s] tps numRds minRdLat[ns] maxRdLat[ns] AvgRdLat[ms] "
-                            + "numUpdts minUpdtLat[ns] maxUpdtLat[ns] AvgUpdtLat[ms] timeouts uri");
+                            + "numUpdts minUpdtLat[ns] maxUpdtLat[ns] AvgUpdtLat[ms] "
+                            + "numQueries minQLat[ns] maxQLat[ns] AvgQLat[ms] timeouts uri");
             for (final RunThread r : threads.keySet()) {
                 r.writeDbStats(pw);
             }
@@ -360,18 +369,24 @@ public class MongoBench {
     }
 
     private void collectAndReportLatencies(Set<RunThread> threads, long duration) {
-        int numInserts = 0, numReads = 0;
-        float minReadLatency = Float.MAX_VALUE, maxReadLatency = 0f, minWriteLatency = Float.MAX_VALUE, maxWriteLatency = 0f;
-        float avgReadLatency = 0f, avgWriteLatency = 0f;
+        int numInserts = 0, numReads = 0, numQueries = 0;
+        float minReadLatency = Float.MAX_VALUE, maxReadLatency = 0f;
+        float minWriteLatency = Float.MAX_VALUE, maxWriteLatency = 0f;
+        float minQueryLatency = Float.MAX_VALUE, maxQueryLatency = 0f;
+        float avgReadLatency = 0f, avgWriteLatency = 0f, avgQueryLatency = 0f;
         float tps;
         for (final RunThread r : threads) {
             numReads += r.getNumReads();
             numInserts += r.getNumInserts();
+            numQueries += r.getNumQueries();
             if (r.getMaxReadlatency() > maxReadLatency) {
                 maxReadLatency = r.getMaxReadlatency();
             }
             if (r.getMaxWriteLatency() > maxWriteLatency) {
                 maxWriteLatency = r.getMaxWriteLatency();
+            }
+            if (r.getMaxQueryLatency() > maxQueryLatency) {
+                maxQueryLatency = r.getMaxQueryLatency();
             }
             if (r.getMinReadLatency() < minReadLatency) {
                 minReadLatency = r.getMinReadLatency();
@@ -379,19 +394,27 @@ public class MongoBench {
             if (r.getMinWriteLatency() < minWriteLatency) {
                 minWriteLatency = r.getMinWriteLatency();
             }
+            if (r.getMinQueryLatency() < minQueryLatency) {
+                minQueryLatency = r.getMinQueryLatency();
+            }
+
             avgReadLatency += r.getAccReadLatencies();
             avgWriteLatency += r.getAccWriteLatencies();
+            avgQueryLatency += r.getAccQueryLatencies();
         }
         avgReadLatency = avgReadLatency / numReads;
         avgWriteLatency = avgWriteLatency / numInserts;
-        tps = (numInserts + numReads) * 1000f / (duration);
-        log.info("{} inserts, {} reads in {} s, {} requests/sec", numInserts, numReads, 
+        avgQueryLatency = avgQueryLatency / numQueries;
+        tps = (numInserts + numReads + numQueries) * 1000f / (duration);
+        log.info("{} inserts, {} reads, {} queries in {} s, {} requests/sec", numInserts, numReads, numQueries, 
                 decimalFormat.format(duration / 1000f), decimalFormat.format(tps));
         log.info("Read latency Min/Max/Avg [ms]: {}/{}/{}", decimalFormat.format(minReadLatency / 1000000f),
                 decimalFormat.format(maxReadLatency / 1000000f), decimalFormat.format(avgReadLatency / 1000000f));
         log.info("Write latency Min/Max/Avg [ms]: {}/{}/{}", decimalFormat.format(minWriteLatency / 1000000f),
                 decimalFormat.format(maxWriteLatency / 1000000f), decimalFormat.format(avgWriteLatency / 1000000f));
-    }
+        log.info("Query latency Min/Max/Avg [ms]: {}/{}/{}", decimalFormat.format(minQueryLatency / 1000000f),
+                decimalFormat.format(maxQueryLatency / 1000000f), decimalFormat.format(avgQueryLatency / 1000000f));
+   }
 
     private List<List<String>> createSlices(String[] mongoUri, int numThreads) {
         final List<List<String>> slices = new ArrayList<List<String>>(numThreads);
