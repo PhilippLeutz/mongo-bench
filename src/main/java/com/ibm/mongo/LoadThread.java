@@ -53,14 +53,15 @@ public class LoadThread implements Runnable {
     public void run() {
         log.info("Loading data into {} instances", mongoUri.size());
         for (int i = 0; i < mongoUri.size(); i++) {
-            String uri = mongoUri.size();
+            String uri = mongoUri.get(i);
             log.info("Database URI {}", uri);
-            
-            List<String> host = MongoURI.parse(uri).host;
-            String username = MongoURI.parse(uri).username;
-            String password = MongoURI.parse(uri).password;
-            String replica = MongoURI.parse(uri).replica;
-            boolean sslEnabled = MongoURI.parse(uri).isSSLEnabled;
+        
+            MongoURI.parseURI(uri); 
+            List<String> host = MongoURI.host;
+            String username = MongoURI.username;
+            String password = MongoURI.password;
+            String replica = MongoURI.replica;
+            boolean sslEnabled = MongoURI.isSSLEnabled;
 
             int count = 0, currentBatchSize;
             final MongoClientOptions ops = MongoClientOptions.builder()
