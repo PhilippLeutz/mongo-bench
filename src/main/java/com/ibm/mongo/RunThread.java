@@ -310,6 +310,7 @@ public class RunThread implements Runnable {
     private void updateRecord(int clientIdx, MongoClient client) throws IOException {
         final int randKey = rand.nextInt(numDocuments);
         final Document doc = new Document("_id", randKey); 
+        data = RandomStringUtils.randomAlphabetic(1024);
         long start = System.nanoTime();
         client.getDatabase(MongoBench.DB_NAME).getCollection(MongoBench.COLLECTION_NAME)
                 .updateOne(doc, new Document("$set", new Document("data", data)));
