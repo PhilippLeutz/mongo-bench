@@ -20,7 +20,7 @@ usage: java -jar mongo-bench-1.1-beta-SNAPSHOT-jar-with-dependencies.jar
      -c,--num-documents <arg>        The number of documents to create during the load phase
      -d,--duration <arg>             Run the bench for this many seconds
      -e,--user <arg>                 Username for authentication
-     -f,--connect-file <arg>         Use a connection file with IP:Port lines instead of p and t
+     -f,--connect-file <arg>         Use a connection file with MongoDB URIs instead of p and t
      -h,--help                       Show this help dialog
      -i,--replica-set <arg>          Name of the replica set to connect
      -j,--target-rate <arg>          Send request at the given rate. Accepts decimal numbers
@@ -40,7 +40,7 @@ usage: java -jar mongo-bench-1.1-beta-SNAPSHOT-jar-with-dependencies.jar
 
 ### Examples
 Loading `1000` documents of size `1024` bytes each into MongoDB instances on ports `30001-30010` on `9.114.14.14` using `8` threads:
-```bash
+```
 #> java -jar /tmp/mongo-bench-1.0-SNAPSHOT-jar-with-dependencies.jar -s 1024 \
 -c 1000 -l load -p 30001-30010 -t 9.114.14.14 -n 8
 ```
@@ -49,7 +49,7 @@ Loading `1000` documents of size `1024` bytes each into MongoDB instances on por
 Loading `1000` documents of size `1024` bytes into a MongoDB instance on port
 `20401` on `10.1.9.199` using `1` thread, replica-set name `usman1`, SSL and
 authorization username and password `usman`:
-```bash
+```
 #> java -Djavax.net.ssl.trustStore=/home/usman/cluster_keystore.jks \
 -Djavax.net.ssl.trustStorePassword=changeit -Djavax.net.ssl.debug=all -jar \
 target/mongo-bench-1.1-beta-SNAPSHOT-jar-with-dependencies.jar -s 1024 -c 1000 \
@@ -59,10 +59,36 @@ target/mongo-bench-1.1-beta-SNAPSHOT-jar-with-dependencies.jar -s 1024 -c 1000 \
 Of course, you would need to import the certificate and add it to a `keystore`,
 for java to read. 
 
+---
+Using a "connect file" as given below:
+```
+mongodb://usman:usman@IP9-132-34.ibm.com:2058,IP9-171-13.ibm.com:2038,IP9-191-15.ibm.com:2319/?replicaSet=usman2&ssl=true
+mongodb://usman:usman@IP9-132-34.ibm.com:1371,IP9-171-13.ibm.com:2088,IP9-191-15.ibm.com:2919/?replicaSet=usman1&ssl=true
+```
+
+One can run the following command to load into the two databases:
+```
+java -Djavax.net.ssl.trustStore=/home/usman/cluster_keystore.jks \
+-Djavax.net.ssl.trustStorePassword=changeit -jar \
+target/mongo-bench-2.0-beta-SNAPSHOT-jar-with-dependencies.jar -s 1024 -c 1000 \
+-l load -n 2 -f /home/usman/cluster_connect.txt
+```
+
+Currently, use only 1 thread for each DB for loading.
+
+For running the read/write test for 60 seconds, use the following command:
+```
+java -Djavax.net.ssl.trustStore=/home/usman/cluster_keystore.jks \
+-Djavax.net.ssl.trustStorePassword=changeit -jar \
+target/mongo-bench-2.0-beta-SNAPSHOT-jar-with-dependencies.jar -s 1024 -c 1000 \
+-l run -n 2 -f /home/usman/cluster_connect.txt -d 60
+```
 
 ---
-Running the benchmark against ports `30001-30010` on the box `9.114.14.14` using 4 threads for `600` seconds with a `60` second warmup time and target an overall rate of `1000` transactions/second:
-```bash
+Running the benchmark against ports `30001-30010` on the box `9.114.14.14` using 
+4 threads for `600` seconds with a `60` second warmup time and target an overall
+rate of `1000` transactions/second:
+```
 #> java -Xmx16384m -jar /tmp/mongo-bench-1.0-SNAPSHOT-jar-with-dependencies.jar \
 -l run -p 30001-30010 -t 9.114.14.14 -n 4 -w 60 -d 600 -j 1000
 ```
