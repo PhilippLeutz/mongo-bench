@@ -297,7 +297,6 @@ public class RunThread implements Runnable {
                                             clients[clientIdx].getAddress().getPort());
                         }
                     }
-                    elapsed = System.currentTimeMillis() - startMillis;
                     readIdx = readIdx + 1 < clientList.size() ? readIdx + 1 : 0;
                     if(readIdx == 0) {
                         Collections.shuffle(clientList);
@@ -321,6 +320,7 @@ public class RunThread implements Runnable {
                     }
                 }
             }
+            elapsed = System.currentTimeMillis() - startMillis;
         } catch (IOException e) {
             log.error("Error while running benchmark", e);
         }
