@@ -96,13 +96,13 @@ public class MongoBench {
                 throw new ParseException("No phase given. Try \"--help/-h\"");
             }
            
-            final String tmpIP;
-            final Integer tmpPort;
-            final String tmpUser;
-            final String tmpPassword;
-            final String tmpReplica;
-            final List<Integer> tmpPorts = new ArrayList<Integer>();
-            final List<String> tmpMongoUri = new ArrayList<String>();
+            String tmpIP = "";
+            Integer tmpPort;
+            String tmpUser;
+            String tmpPassword;
+            String tmpReplica;
+            List<Integer> tmpPorts = new ArrayList<Integer>();
+            List<String> tmpMongoUri = new ArrayList<String>();
             
             if (cli.hasOption('p')) {   // Ports
                 final String portVal = cli.getOptionValue('p');
@@ -159,6 +159,8 @@ public class MongoBench {
             } else {
                 if (cli.hasOption('t')) {
                     tmpIP = cli.getOptionValue('t');
+                } else {
+                    log.error("Must provide \"t\" option");
                 }
                 if (cli.hasOption('e')) {
                     tmpUser = cli.getOptionValue('e');
@@ -177,10 +179,14 @@ public class MongoBench {
                 }
 
                 ports = new int[tmpPorts.size()];
+
                 for(int i=0;i<tmpPorts.size();i++) {
                     ports[i] = tmpPorts.get(i);
-                    tmpMongoUri.add(MongoURI.createURI(tmpIP, tmpPorts.get(i), tmpUser, tmpPassword,
-                                    tmpReplica, sslEnabled));
+                    List<String> tmpHost = new 
+                        ArrayList<String>(Arrays.asList(tmpIP + ":" + Integer.toString(tmpPorts.get(i))));
+                    String uri = MongoURI.createURI(tmpHost, tmpUser, tmpPassword,
+                                        tmpReplica, sslEnabled); 
+                    tmpMongoUri.add(uri);
                 }
             }
 
@@ -241,24 +247,23 @@ public class MongoBench {
             if (phase == Phase.LOAD) {
                 bench.doLoadPhase(mongoUri, numThreads, numDocuments, documentSize, timeouts);
             } else {
-                bench.doRunPhase(host, ports, numDocuments, warmup, duration, numThreads, reportingInterval, 
-                    rateLimit, latencyFilePrefix, timeouts, sslEnabled, username, password, replica);
+                bench.doRunPhase(mongoUri, numDocuments, warmup, duration, numThreads, reportingInterval, 
+                    rateLimit, latencyFilePrefix, timeouts);
             }
         } catch (ParseException e) {
             log.error("Unable to parse", e);
         }
     }
 
-    private void doRunPhase(String[] host, int[] ports, int numDocuments, int warmup, int duration, int numThreads, 
-                    int reportingInterval, float targetRate, String latencyFilePrefix, int timeouts, boolean sslEnabled,
-                    String username, String password, String replica) {
-        log.info("Starting {} threads for {} instances", numThreads, ports.length);
+    private void doRunPhase(String[] mongoUri, int numDocuments, int warmup, int duration, int numThreads, 
+                    int reportingInterval, float targetRate, String latencyFilePrefix, int timeouts) {
+        log.info("Starting {} threads for {} instances", numThreads, mongoUri.length);
         final Map<RunThread, Thread> threads = new HashMap<RunThread, Thread>(numThreads);
-        final List<List<String>> slices = createSlices(host, ports, username, password, replica, numThreads);
+        final List<List<String>> slices = createSlices(mongoUri, numThreads);
 
         for (int i = 0; i < numThreads; i++) {
             RunThread t = new RunThread(i, slices.get(i), numDocuments, targetRate / (float) numThreads, 
-                            latencyFilePrefix, timeouts, sslEnabled, username, password, replica);
+                            latencyFilePrefix, timeouts);
             threads.put(t, new Thread(t));
         }
         for (final Thread t : threads.values()) {
@@ -320,14 +325,14 @@ public class MongoBench {
         log.info("Read {} and inserted {} documents in {} secs", numReads, numInserts, decimalFormat.format((float) elapsed / 1000f));
         log.info("Overall transaction rate: {} transactions/second", decimalFormat.format(rate));
         log.info("Average transaction rate per thread: {} transactions/second", decimalFormat.format(avgRatePerThread));
-        log.info("Average transaction rate per instance: {} transactions/second", decimalFormat.format(rate / (float) ports.length));
+        log.info("Average transaction rate per instance: {} transactions/second", decimalFormat.format(rate / (float) mongoUri.length));
         collectAndReportLatencies(threads.keySet(), elapsed);
 
         // Write the per DB stats to a file
         try {
             PrintWriter pw = new PrintWriter("/tmp/per_db_stats.txt", "UTF-8");
-            pw.println("Thread host port time[s] tps numRds minRdLat[ns] maxRdLat[ns] AvgRdLat[ms] "
-                            + "numUpdts minUpdtLat[ns] maxUpdtLat[ns] AvgUpdtLat[ms] timeouts");
+            pw.println("Thread time[s] tps numRds minRdLat[ns] maxRdLat[ns] AvgRdLat[ms] "
+                            + "numUpdts minUpdtLat[ns] maxUpdtLat[ns] AvgUpdtLat[ms] timeouts uri");
             for (final RunThread r : threads.keySet()) {
                 r.writeDbStats(pw);
             }
@@ -390,11 +395,11 @@ public class MongoBench {
 
     private List<List<String>> createSlices(String[] mongoUri, int numThreads) {
         final List<List<String>> slices = new ArrayList<List<String>>(numThreads);
-        if (ports.length >= numThreads) {
+        if (mongoUri.length >= numThreads) {
             for (int i = 0; i < numThreads; i++) {
                 slices.add(new ArrayList<String>());
             }
-            for (int i = 0; i < ports.length; i++) {
+            for (int i = 0; i < mongoUri.length; i++) {
                 int sliceIdx = i % numThreads;
                 slices.get(sliceIdx).add(mongoUri[i]);
             }
@@ -409,14 +414,14 @@ public class MongoBench {
                     conTmp = slices.get(i);
                 }
                 conTmp.add(mongoUri[portIndex++]);
-                if (portIndex == ports.length) {
+                if (portIndex == mongoUri.length) {
                     portIndex = 0;
                 }
             }
         }
         int count = 0;
-        for (List<String> portTmp : slices) {
-            System.out.printf("Thread %d will connect to %s\n", count++, portTmp);
+        for (List<String> uriTmp : slices) {
+            System.out.printf("Thread %d will connect to %s\n", count++, uriTmp);
         }
         return slices;
     }
@@ -428,7 +433,7 @@ public class MongoBench {
         final List<List<String>> slices = createSlices(mongoUri, numThreads);
 
         for (int i = 0; i < numThreads; i++) {
-            LoadThread l = new LoadThread(slices.get(i), numDocuments, documentSize, timeout);
+            LoadThread l = new LoadThread(slices.get(i), numDocuments, documentSize, timeouts);
             threads.put(l, new Thread(l));
         }
 
