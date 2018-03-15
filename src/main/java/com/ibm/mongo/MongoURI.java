@@ -19,6 +19,7 @@ package com.ibm.mongo;
 
 import com.mongodb.MongoClientURI;
 import com.mongodb.MongoClientOptions;
+import java.util.*;
 
 public final class MongoURI {
     public static List<String> host = new ArrayList<String>();
@@ -34,7 +35,7 @@ public final class MongoURI {
         isSSLEnabled = false;
     }
 
-    private static void parseURI(String uri) {
+    public static void parseURI(String uri) {
         MongoClientURI clientURI = new MongoClientURI(uri);
         host = clientURI.getHosts();
         username = clientURI.getUsername();
@@ -43,20 +44,24 @@ public final class MongoURI {
         isSSLEnabled = uri.toLowerCase().contains("ssl");
     }
 
-    public static String createURI(String host, int port, String username, 
+    public static String createURI(List<String> host, String username, 
                     String password, String replica, boolean sslEnabled) {
         String uri = "mongodb://";
         if (!"".equals(username) && !"".equals(password)) {
-            uri = uri + username + ":" + password + "@" + host + ":" + port + "/";
-        } else {
-            uri = uri + host + ":" + port + "/";
-        }
-
+            uri = uri + username + ":" + password + "@";
+        } 
+        
+        uri = uri + host + "/";
+        
         if (!"".equals(replica)) {
-            if (sslEnabled == true) {
-                uri = uri + "?replicaSet=" + replica + "&ssl=true";
+            uri = uri + "?replicaSet=" + replica;
+        }
+    
+        if (sslEnabled == true) {
+            if (!"".equals(replica)) {
+                uri = uri + "&ssl=true";
             } else {
-                uri = uri + "?replicaSet=" + replica;
+                uri = uri + "?ssl=true";
             }
         }
 
