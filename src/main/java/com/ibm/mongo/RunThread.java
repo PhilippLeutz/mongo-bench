@@ -406,9 +406,9 @@ public class RunThread implements Runnable {
         BasicDBObject regexQuery = new BasicDBObject();
         regexQuery.put("data", new BasicDBObject("$regex", "^lr.*").append("$options", "i"));
         long start = System.nanoTime();
-        FindIterable<Document> cursor = client.getDatabase(MongoBench.DB_NAME)
-                                .getCollection(MongoBench.COLLECTION_NAME)
-                                .find(regexQuery); 
+        Document doc = client.getDatabase(MongoBench.DB_NAME)
+                            .getCollection(MongoBench.COLLECTION_NAME)
+                            .find(regexQuery).first(); 
         long latency = System.nanoTime() - start;
         if (latency < minQueryLatency) {
             minQueryLatency = latency;
@@ -419,9 +419,10 @@ public class RunThread implements Runnable {
         
         accQueryLatencies += latency;
         numQueries++;
+        dbStats[clientIdx].pushNewQueryLatency(latency);
 
-        if (cursor != null) {
-            dbStats[clientIdx].pushNewQueryLatency(latency);
+        if (doc == null) {
+            log.warn("Thread {}: query returned nothing, but accounted for.", id);
         }
     }
 
