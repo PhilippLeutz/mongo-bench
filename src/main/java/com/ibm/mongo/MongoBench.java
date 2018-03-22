@@ -491,7 +491,8 @@ public class MongoBench {
         }
 
         for (int i = 0; i < numThreads; i++) {
-            LoadThread l = new LoadThread(slices.get(i), numDocuments, documentSize, timeouts);
+            LoadThread l = new LoadThread(i, slices.get(i), numDocuments, documentSize, 
+                    timeouts, startRecord[i], endRecord[i]);
             threads.put(l, new Thread(l));
         }
 
