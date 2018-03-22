@@ -34,27 +34,36 @@ public class LoadThread implements Runnable {
 
     private static final Logger log = LoggerFactory.getLogger(LoadThread.class);
 
+    private final int id;
     private final List<String> mongoUri;     // A list with MongoDB URI enteries
     private final int numDocuments;
+    private final int numDocsToInsert;
     private final int docSize;
     private final int maxBatchSize = 1000;
     private final int timeoutMs;
     private final Map<String, Integer> failed = new HashMap<>();
     private final static DecimalFormat decimalFormat = new DecimalFormat("0.0000");
+    private final int startRecord;          // Starting insert record number
+    private final int endRecord;            // Ending insert record number
 
-    public LoadThread(List<String> mongoUri, int numDocuments, int docSize, int timeout) {
+    public LoadThread(int id, List<String> mongoUri, int numDocuments, int docSize, int timeout, 
+                int startRecord, int endRecord) {
+        this.id = id;
         this.mongoUri = mongoUri;
         this.numDocuments = numDocuments;
         this.docSize = docSize;
         this.timeoutMs = timeout * 1000;
+        this.startRecord = startRecord;
+        this.endRecord = endRecord;
+        this.numDocsToInsert = endRecord - startRecord + 1;
     }
 
     @Override
     public void run() {
-        log.info("Loading data into {} instances", mongoUri.size());
+        log.info("Thread {} loading {} docs into {} instances", id, numDocsToInsert, mongoUri.size());
         for (int i = 0; i < mongoUri.size(); i++) {
             String uri = mongoUri.get(i);
-            log.info("Database URI {}", uri);
+            log.info("Thread {} connnecting to database URI {}", id, uri);
         
             MongoURI.parseURI(uri); 
             List<String> host = MongoURI.host;
@@ -85,8 +94,8 @@ public class LoadThread implements Runnable {
                 }
             }
             long startLoad = System.currentTimeMillis();
-            while (count < numDocuments) {
-                currentBatchSize = numDocuments - count > maxBatchSize ? maxBatchSize : numDocuments - count;
+            while (count < numDocsToInsert) {
+                currentBatchSize = numDocsToInsert - count > maxBatchSize ? maxBatchSize : numDocsToInsert - count;
                 final Document[] docs = createDocuments(currentBatchSize, count);
                 final MongoCollection<Document> collection = client.getDatabase(MongoBench.DB_NAME).getCollection(MongoBench.COLLECTION_NAME);
                 try {
@@ -102,7 +111,7 @@ public class LoadThread implements Runnable {
                             break;
                         }
                     } catch (Exception ie) {
-                        log.error("No connection to {}:{}. Reconnecting...");
+                        log.error("Thread {} no connection to {}. Reconnecting...", id, host);
                         client.close();
                         client = new MongoClient(cUri);
                     }
@@ -111,17 +120,19 @@ public class LoadThread implements Runnable {
             }
             client.close();
             long duration = System.currentTimeMillis() - startLoad;
-            float rate = numDocuments * 1000f / (float) duration;
+            float rate = numDocsToInsert * 1000f / (float) duration;
             if (failed.size() > 0) {
                 int numFailed = 0;
                 log.error("Errors occured during the loading of the data");
                 for (final Map.Entry<String, Integer> error : failed.entrySet()) {
-                    log.error("Unable to insert {} documents at {}:{}", error.getValue(), error.getKey());
+                    log.error("Thread {} unable to insert {} documents at {}:{}", 
+                        id, error.getValue(), error.getKey());
                     numFailed += error.getValue();
                 }
-                log.error("Overall {} inserts failed", numFailed);
+                log.error("Thread {} overall {} inserts failed", id, numFailed);
             }
-            log.info("Finished loading {} documents in {} [{} inserts/sec]", count, host, rate);
+            log.info("Thread {} finished loading {} documents in {} [{} inserts/sec]", 
+                id, count, host, rate);
         }
     }
 
@@ -130,7 +141,7 @@ public class LoadThread implements Runnable {
         final Document[] docs = new Document[count];
         for (int i = 0; i < count; i++) {
             docs[i] = new Document()
-                    .append("_id", i + offset)
+                    .append("_id", i + startRecord + offset)
                     .append("data", data);
         }
         return docs;

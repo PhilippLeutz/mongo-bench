@@ -94,7 +94,7 @@ rate of `1000` transactions/second:
 ```
 
 
---- 
+### Debugging
 For debugging the application, start the JVM in terminal via:
 ```
 java -Djavax.net.ssl.trustStore=/home/usman/cluster_keystore.jks \
@@ -108,3 +108,20 @@ In a separate terminal, use `jdb` to attach to this JVM.
 ```
 jdb -connect com.sun.jdi.SocketAttach:port=8000 -sourcepath src/main/java/
 ``` 
+
+---
+To connect to a DB, use the following commands:
+```
+mongo
+"mongodb://usman:usman@IP9-114-15.pok.stglabs.ibm.com:20359,IP9-114-13.pok.stglabs.ibm.com:20598,IP9-114-14.pok.stglabs.ibm.com:20438/?replicaSet=usman2&ssl=true" \
+--sslCAFile /tmp/IP9-114-15.pok.stglabs.ibm.com:20359.pem --ssl \
+--sslAllowInvalidCertificates
+```
+
+Afterwards, use the following commands to check the status of the DB.
+```
+rs.status();
+show dbs;
+use mongo-bench;
+db.stats();
+```
