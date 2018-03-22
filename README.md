@@ -93,3 +93,18 @@ rate of `1000` transactions/second:
 -l run -p 30001-30010 -t 9.114.14.14 -n 4 -w 60 -d 600 -j 1000
 ```
 
+
+--- 
+For debugging the application, start the JVM in terminal via:
+```
+java -Djavax.net.ssl.trustStore=/home/usman/cluster_keystore.jks \
+-Djavax.net.ssl.trustStorePassword=changeit \
+-agentlib:jdwp=transport=dt_socket,address=8000,server=y,suspend=y -jar \
+target/mongo-bench-2.0-beta-SNAPSHOT-jar-with-dependencies.jar -s 1024 -c 1000 \
+-l load -n 2 -f /home/usman/cluster_connect.txt -d 60
+```
+
+In a separate terminal, use `jdb` to attach to this JVM.
+```
+jdb -connect com.sun.jdi.SocketAttach:port=8000 -sourcepath src/main/java/
+``` 

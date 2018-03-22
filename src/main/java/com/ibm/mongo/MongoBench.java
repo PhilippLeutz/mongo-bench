@@ -455,6 +455,41 @@ public class MongoBench {
         final Map<LoadThread, Thread> threads = new HashMap<LoadThread, Thread>(numThreads);
         final List<List<String>> slices = createSlices(mongoUri, numThreads);
 
+        // If there are multiple threads going to write to the same database,
+        // then we need to distirubte the records among the threads for
+        // inserting into the database
+        int[] startRecord = new int[numThreads];
+        int[] endRecord = new int[numThreads];
+
+        if (numThreads > mongoUri.length) { // more threads than DBs
+            for (int i = 0; i < mongoUri.length; i++) { // for each DB
+                List<Integer> threadsForDb = new ArrayList<Integer>();
+                for (int j = 0; j < slices.size(); j++) {   // for each thread
+                    List<String> subSlice = slices.get(j);
+                    for (int k = 0; k < subSlice.size(); k++) { // for each assigned DB
+                        if (mongoUri[i].equals(subSlice.get(k))) {   // the current DB is served by the current thread
+                            threadsForDb.add(j);
+                        }
+                    }
+                }
+
+                System.out.println("DB " + i + " served by threads: " + 
+                    Arrays.toString(threadsForDb.toArray()));
+                int numDocsPerTh = numDocuments/threadsForDb.size();
+                int insertStart = 0;
+                startRecord[threadsForDb.get(0)] = insertStart;
+                for(int m = 0; m < threadsForDb.size()-1; m++) {    // fill start and end records
+                    endRecord[threadsForDb.get(m)] = insertStart+numDocsPerTh-1;
+                    insertStart += numDocsPerTh;
+                    startRecord[threadsForDb.get(m+1)] = insertStart;
+                }
+                endRecord[threadsForDb.get(threadsForDb.size()-1)] = numDocuments-1;
+            }
+        } else {    // more DBs than threads
+            Arrays.fill(startRecord, 0);
+            Arrays.fill(endRecord, numDocuments-1);
+        }
+
         for (int i = 0; i < numThreads; i++) {
             LoadThread l = new LoadThread(slices.get(i), numDocuments, documentSize, timeouts);
             threads.put(l, new Thread(l));
