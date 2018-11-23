@@ -159,7 +159,7 @@ public class RunThread implements Runnable {
     private int numInserts = 0;
     private int numReads = 0;
     private int numQueries = 0;
-    private String data = RandomStringUtils.randomAlphabetic(1024);
+    private char [] data = RandomStringUtils.randomAlphabetic(1024).toCharArray();
     private long maxReadLatency = 0;
     private long minReadLatency = Long.MAX_VALUE;
     private long maxUpdateLatency = 0;
@@ -359,10 +359,10 @@ public class RunThread implements Runnable {
     private void updateRecord(int clientIdx, MongoClient client) throws IOException {
         final int randKey = rand.nextInt(numDocuments);
         final Document doc = new Document("_id", randKey); 
-        data = RandomStringUtils.randomAlphabetic(1024);
+        data[rand.nextInt(1024)] = (char)(rand.nextInt(25) + 'a');
         long start = System.nanoTime();
         client.getDatabase(MongoBench.DB_NAME).getCollection(MongoBench.COLLECTION_NAME)
-                .updateOne(doc, new Document("$set", new Document("data", data)));
+                .updateOne(doc, new Document("$set", new Document("data", String.valueOf(data))));
         long latency = System.nanoTime() - start;
         recordLatency(latency, insertLatencySink);
         if (latency < minUpdateLatency) {
