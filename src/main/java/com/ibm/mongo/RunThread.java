@@ -17,23 +17,28 @@
 
 package com.ibm.mongo;
 
-import com.mongodb.*;
-import com.mongodb.client.*;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
+import java.util.Random;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import org.apache.commons.lang.RandomStringUtils;
 import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.*;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.Random;
-import java.util.Locale;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
+import com.mongodb.BasicDBObject;
+import com.mongodb.MongoClient;
+import com.mongodb.MongoClientOptions;
+import com.mongodb.MongoClientURI;
+import com.mongodb.MongoSocketException;
+import com.mongodb.MongoTimeoutException;
+import com.mongodb.ServerAddress;
 
 /**
  * RunThread for MongoDB benchmarking.

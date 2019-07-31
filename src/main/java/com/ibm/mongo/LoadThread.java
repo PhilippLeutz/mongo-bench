@@ -17,18 +17,21 @@
 
 package com.ibm.mongo;
 
-import com.mongodb.MongoClientURI;
-import com.mongodb.MongoClient;
-import com.mongodb.MongoClientOptions;
-import com.mongodb.ServerAddress;
-import com.mongodb.client.MongoCollection;
+import java.text.DecimalFormat;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import org.apache.commons.lang.RandomStringUtils;
 import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.text.DecimalFormat;
-import java.util.*;
+import com.mongodb.MongoClient;
+import com.mongodb.MongoClientOptions;
+import com.mongodb.MongoClientURI;
+import com.mongodb.client.MongoCollection;
 
 public class LoadThread implements Runnable {
 

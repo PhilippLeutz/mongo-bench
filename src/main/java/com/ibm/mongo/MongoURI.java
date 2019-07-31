@@ -17,9 +17,10 @@
 
 package com.ibm.mongo;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.mongodb.MongoClientURI;
-import com.mongodb.MongoClientOptions;
-import java.util.*;
 
 public final class MongoURI {
     public static List<String> host = new ArrayList<String>();
