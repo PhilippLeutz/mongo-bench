@@ -73,6 +73,7 @@ public class MongoBench {
 		ops.addOption("k", "password", true, "Password for authentication");
 		ops.addOption("i", "replica-set", true, "Name of the replica set to connect");
 		ops.addOption("f", "connect-file", true, "Use a connection file with each line containing MongoDB URI"); 
+		ops.addOption("b", "offset", true, "number to offset when creating slices for Ids of the documents inserted");
 		ops.addOption("q", "query", false, "Search for data starting with \"lr\" case insentive rather than read/write"); 
 		ops.addOption("D", "document-type", true, "Document Type, either random (default, lorem (text-like data), or json (reads file from json-path)");
 		ops.addOption("J", "json-path", true, "Path to JSON file to insert into the database. Only viable with -D = json");
@@ -96,7 +97,7 @@ public class MongoBench {
 		final String[] mongoUri;
 		LoadThread.DocType docType;
 		String jsonPath;
-		int offesetForSlices = 230;
+		int offesetForSlices;
 		try {
 			final CommandLine cli = parser.parse(ops, args);
 			if (cli.hasOption('h')) {
@@ -147,6 +148,14 @@ public class MongoBench {
 				sslEnabled = false;
 			}
 
+			
+			if(cli.hasOption('b')){
+				offesetForSlices = Integer.parseInt(cli.getOptionValue('b'));
+			}
+			else{
+				offesetForSlices = 0;
+			}
+			
 			if(cli.hasOption('f')) {    // Connect File
 				if (cli.hasOption('t')) {
 					throw new ParseException("Cannot use -t and -f together");
@@ -290,6 +299,7 @@ public class MongoBench {
 			}else{
 				jsonPath = "";
 			}
+		
 			final MongoBench bench = new MongoBench();
 			if (phase == Phase.LOAD) {
 				bench.doLoadPhase(mongoUri, numThreads, numDocuments, documentSize, timeouts, docType, jsonPath, skipDrop, offesetForSlices);
@@ -297,6 +307,7 @@ public class MongoBench {
 				bench.doRunPhase(mongoUri, numDocuments, warmup, duration, numThreads, reportingInterval, 
 						rateLimit, latencyFilePrefix, timeouts, isQuery);
 			}
+			
 		} catch (ParseException e) {
 			log.error("Unable to parse", e);
 		}
