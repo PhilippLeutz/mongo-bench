@@ -19,6 +19,7 @@ package com.ibm.mongo;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
+import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.URISyntaxException;
 import java.text.DecimalFormat;
@@ -54,6 +55,7 @@ public class MongoBench {
 		RUN, LOAD
 	}
 
+
 	public static void main(String[] args) {
 		final Options ops = new Options();
 		ops.addOption("p", "port", true, "The ports to connect to");
@@ -75,10 +77,11 @@ public class MongoBench {
 		ops.addOption("f", "connect-file", true, "Use a connection file with each line containing MongoDB URI"); 
 		ops.addOption("b", "offset", true, "number to offset when creating slices for Ids of the documents inserted");
 		ops.addOption("q", "query", false, "Search for data starting with \"lr\" case insentive rather than read/write"); 
+		ops.addOption("W", "write-rate", true, "Write rate in percent for run-mode. Has to be between 0 and 100. Default: 10");
 		ops.addOption("D", "document-type", true, "Document Type, either random (default, lorem (text-like data), or json (reads file from json-path)");
-		ops.addOption("J", "json-path", true, "Path to JSON file to insert into the database. Only viable with -D = json");
 		ops.addOption("h", "help", false, "Show this help dialog");
 		ops.addOption("x", "skip-drop", false, "Skip database cleaning, when it already exists");
+		ops.addOption("B", true, "Use a List of offsets for different threads");
 		final CommandLineParser parser = new DefaultParser();
 		final Phase phase;
 		final int[] ports;
@@ -96,8 +99,13 @@ public class MongoBench {
 		boolean skipDrop = false;
 		final String[] mongoUri;
 		LoadThread.DocType docType;
-		String jsonPath;
 		int offesetForSlices;
+		int writeRate = 10;
+		IndiciesHelper indiciesHelper;
+
+		int[] indexLimitsForThreads;
+
+
 		try {
 			final CommandLine cli = parser.parse(ops, args);
 			if (cli.hasOption('h')) {
@@ -122,6 +130,7 @@ public class MongoBench {
 			String tmpReplica;
 			List<Integer> tmpPorts = new ArrayList<Integer>();
 			List<String> tmpMongoUri = new ArrayList<String>();
+
 
 			if (cli.hasOption('p')) {   // Ports
 				final String portVal = cli.getOptionValue('p');
@@ -148,14 +157,17 @@ public class MongoBench {
 				sslEnabled = false;
 			}
 
-			
+			if (cli.hasOption('W')){
+				writeRate = Integer.parseInt(cli.getOptionValue('W'));
+			}
+
 			if(cli.hasOption('b')){
 				offesetForSlices = Integer.parseInt(cli.getOptionValue('b'));
 			}
 			else{
 				offesetForSlices = 0;
 			}
-			
+
 			if(cli.hasOption('f')) {    // Connect File
 				if (cli.hasOption('t')) {
 					throw new ParseException("Cannot use -t and -f together");
@@ -282,10 +294,7 @@ public class MongoBench {
 			} else {
 				docType = DocType.random;
 			}
-
-			if(!cli.hasOption('J') && docType.equals(DocType.json)){
-				log.error("Parameter -J required in conjunction with JSON doc-type");
-			}
+			log.info("Using Data-type {}", docType);
 
 			if (cli.hasOption('x')) { // skip Drop DB
 				skipDrop= true;
@@ -293,35 +302,43 @@ public class MongoBench {
 				skipDrop = false;
 			}
 
-			
-			if(cli.hasOption('J')){
-				jsonPath = cli.getOptionValue('J');
-			}else{
-				jsonPath = "";
+			indexLimitsForThreads = null;
+			if(cli.hasOption("B")){
+				if(cli.hasOption("b")){
+					log.error("options b and B are exclusive");
+					throw new ParseException("options b and B are exclusive");
+				} else {
+					String limitsPath = cli.getOptionValue("B");
+					indiciesHelper = new IndiciesHelper(numThreads, limitsPath, numDocuments);
+				}
+			} else{
+				indiciesHelper = new IndiciesHelper(numThreads, numDocuments);
 			}
-		
+
 			final MongoBench bench = new MongoBench();
 			if (phase == Phase.LOAD) {
-				bench.doLoadPhase(mongoUri, numThreads, numDocuments, documentSize, timeouts, docType, jsonPath, skipDrop, offesetForSlices);
+				bench.doLoadPhase(mongoUri, numThreads, numDocuments, documentSize, timeouts, docType, skipDrop, offesetForSlices);
 			} else {
 				bench.doRunPhase(mongoUri, numDocuments, warmup, duration, numThreads, reportingInterval, 
-						rateLimit, latencyFilePrefix, timeouts, isQuery);
+						rateLimit, latencyFilePrefix, timeouts, isQuery, writeRate, documentSize, docType, indiciesHelper);
 			}
-			
-		} catch (ParseException e) {
+
+		} catch (ParseException | IOException e) {
 			log.error("Unable to parse", e);
 		}
 	}
 
 	private void doRunPhase(String[] mongoUri, int numDocuments, int warmup, int duration, int numThreads, 
-			int reportingInterval, float targetRate, String latencyFilePrefix, int timeouts, boolean isQuery) {
+			int reportingInterval, float targetRate, String latencyFilePrefix, int timeouts, boolean isQuery, int writeRate, int docSize, DocType docType, IndiciesHelper indiciesHelper) {
 		log.info("Starting {} threads for {} instances", numThreads, mongoUri.length);
 		final Map<RunThread, Thread> threads = new HashMap<RunThread, Thread>(numThreads);
-		final List<List<String>> slices = createSlices(mongoUri, numThreads);
 
+		List<List<String>> slices;
+		slices = createSlices(mongoUri, numThreads);
+		
 		for (int i = 0; i < numThreads; i++) {
 			RunThread t = new RunThread(i, slices.get(i), numDocuments, targetRate / (float) numThreads, 
-					latencyFilePrefix, timeouts, isQuery);
+					latencyFilePrefix, timeouts, isQuery, writeRate, docSize, docType, indiciesHelper);
 			threads.put(t, new Thread(t));
 		}
 		for (final Thread t : threads.values()) {
@@ -406,6 +423,8 @@ public class MongoBench {
 		log.info("Find the DB stats in /tmp/per_db_stats.txt file");
 	}
 
+
+
 	private void warmup(int warmupInSeconds) {
 		if (warmupInSeconds > 0) {
 			long startWarmup = System.currentTimeMillis();
@@ -469,7 +488,7 @@ public class MongoBench {
 				decimalFormat.format(maxQueryLatency / 1000000f), decimalFormat.format(avgQueryLatency / 1000000f));
 	}
 
-	private List<List<String>> createSlices(String[] mongoUri, int numThreads) {
+	private static List<List<String>> createSlices(String[] mongoUri, int numThreads) {
 		final List<List<String>> slices = new ArrayList<List<String>>(numThreads);
 		if (mongoUri.length >= numThreads) {
 			for (int i = 0; i < numThreads; i++) {
@@ -480,31 +499,36 @@ public class MongoBench {
 				slices.get(sliceIdx).add(mongoUri[i]);
 			}
 		} else {
-			int portIndex = 0;
-			for (int currentThread = 0; currentThread < numThreads; currentThread++) {
-				final List<String> conTmp;
-				if (slices.size() <= currentThread) {
-					conTmp = new ArrayList<>();
-					slices.add(currentThread, conTmp);
-				} else {
-					conTmp = slices.get(currentThread);
-				}
-				conTmp.add(mongoUri[portIndex++]);
-				if (portIndex == mongoUri.length) {
-					portIndex = 0;
-				}
-			}
+			createSlicesForThreads(mongoUri, numThreads, slices);
 		}
 		int count = 0;
 		for (List<String> uriTmp : slices) {
-			log.info("Thread %d will connect to %s\n", count++, uriTmp);
+			log.info("Thread {} will connect to {} \n", count++, uriTmp);
 		}
 		return slices;
 	}
 
+	private static void createSlicesForThreads(String[] mongoUri, int numThreads,
+			final List<List<String>> slices) {
+		int portIndex = 0;
+		for (int currentThread = 0; currentThread < numThreads; currentThread++) {
+			final List<String> conTmp;
+			if (slices.size() <= currentThread) {
+				conTmp = new ArrayList<>();
+				slices.add(currentThread, conTmp);
+			} else {
+				conTmp = slices.get(currentThread);
+			}
+			conTmp.add(mongoUri[portIndex++]);
+			if (portIndex == mongoUri.length) {
+				portIndex = 0;
+			}
+		}
+	}
+
 
 	private void doLoadPhase(String[] mongoUri, int numThreads, int numDocuments, 
-			int documentSize, int timeouts, DocType docType, String jsonPath, boolean skipDrop, int insertOffset) {
+			int dockSize, int timeouts, DocType docType, boolean skipDrop, int insertOffset) {
 		final Map<LoadThread, Thread> threads = new HashMap<LoadThread, Thread>(numThreads);
 		final List<List<String>> slices = createSlices(mongoUri, numThreads);
 
@@ -515,30 +539,8 @@ public class MongoBench {
 		int[] endRecord = new int[numThreads];
 
 		if (numThreads > mongoUri.length) { // more threads than DBs
-			for (int currentDatabaseIndex = 0; currentDatabaseIndex < mongoUri.length; currentDatabaseIndex++) { // for each DB
-				List<Integer> threadsForDb = new ArrayList<Integer>();
-				for (int currentThread = 0; currentThread < slices.size(); currentThread++) {   // for each thread
-					List<String> subSlice = slices.get(currentThread);
-					for (int k = 0; k < subSlice.size(); k++) { // for each assigned DB
-						if (mongoUri[currentDatabaseIndex].equals(subSlice.get(k))) {   // the current DB is served by the current thread
-							threadsForDb.add(currentThread);
-						}
-					}
-				}
-
-				
-				System.out.println("DB " + currentDatabaseIndex + " served by threads: " + 
-						Arrays.toString(threadsForDb.toArray()));
-				int documentsPerThread = numDocuments/threadsForDb.size();
-				int insertStart = insertOffset;
-				startRecord[threadsForDb.get(0)] = insertStart;
-				for(int m = 0; m < threadsForDb.size()-1; m++) {    // fill start and end records
-					endRecord[threadsForDb.get(m)] = insertStart+documentsPerThread-1-insertOffset;
-					insertStart += documentsPerThread;
-					startRecord[threadsForDb.get(m+1)] = insertStart;
-				}
-				endRecord[threadsForDb.get(threadsForDb.size()-1)] = numDocuments-1;
-			}
+			determinStartAndEndIndices(mongoUri, numDocuments, insertOffset,
+					slices, startRecord, endRecord);
 		} else {    // more DBs than threads
 			Arrays.fill(startRecord, 0);
 			Arrays.fill(endRecord, numDocuments-1);
@@ -546,8 +548,8 @@ public class MongoBench {
 
 		for (int currentThread = 0; currentThread < numThreads; currentThread++) {
 			log.info("Thread {} will insert records {} to {}", currentThread, startRecord[currentThread], endRecord[currentThread]);
-			LoadThread l = new LoadThread(currentThread, slices.get(currentThread), numDocuments, documentSize, 
-					timeouts, startRecord[currentThread], endRecord[currentThread], docType, jsonPath, skipDrop);
+			LoadThread l = new LoadThread(currentThread, slices.get(currentThread), dockSize, 
+					timeouts, startRecord[currentThread], endRecord[currentThread], docType, skipDrop);
 			threads.put(l, new Thread(l));
 		}
 
@@ -565,7 +567,38 @@ public class MongoBench {
 		}
 	}
 
-	private static void showHelp(final Options ops) {
+	private  void determinStartAndEndIndices(String[] mongoUri,
+			int numDocuments, int insertOffset,
+			final List<List<String>> slices, int[] startRecord, int[] endRecord) {
+		for (int currentDatabaseIndex = 0; currentDatabaseIndex < mongoUri.length; currentDatabaseIndex++) { // for each DB
+			List<Integer> threadsForDb = new ArrayList<Integer>();
+			for (int currentThread = 0; currentThread < slices.size(); currentThread++) {   // for each thread
+				List<String> subSlice = slices.get(currentThread);
+				for (int k = 0; k < subSlice.size(); k++) { // for each assigned DB
+					if (mongoUri[currentDatabaseIndex].equals(subSlice.get(k))) {   // the current DB is served by the current thread
+						threadsForDb.add(currentThread);
+					}
+				}
+			}
+			createBatchIndicies(numDocuments, insertOffset, startRecord,
+					endRecord, threadsForDb);
+			endRecord[threadsForDb.get(threadsForDb.size()-1)] = numDocuments-1;
+		}
+	}
+
+	private  void createBatchIndicies(int numDocuments, int insertOffset,
+			int[] startRecord, int[] endRecord, List<Integer> threadsForDb) {
+		int documentsPerThread = numDocuments/threadsForDb.size();
+		int insertStart = insertOffset;
+		startRecord[threadsForDb.get(0)] = insertStart;
+		for(int m = 0; m < threadsForDb.size()-1; m++) {    // fill start and end records
+			endRecord[threadsForDb.get(m)] = insertStart+documentsPerThread-1-insertOffset;
+			insertStart += documentsPerThread;
+			startRecord[threadsForDb.get(m+1)] = insertStart;
+		}
+	}
+
+	private static  void showHelp(final Options ops) {
 		final StringBuilder header = new StringBuilder();
 		header.append("\nOptions:");
 		final StringBuilder footer = new StringBuilder();

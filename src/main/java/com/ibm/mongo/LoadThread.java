@@ -17,14 +17,11 @@
 
 package com.ibm.mongo;
 
-import java.io.FileReader;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.commons.lang.RandomStringUtils;
 import org.bson.Document;
-import org.json.simple.parser.JSONParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,7 +30,6 @@ import com.mongodb.MongoClientOptions;
 import com.mongodb.MongoClientURI;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoCollection;
-import com.thedeanda.lorem.LoremIpsum;
 
 public class LoadThread implements Runnable {
 
@@ -42,35 +38,35 @@ public class LoadThread implements Runnable {
 	private final int id;
 	private final List<String> mongoUri;     // A list with MongoDB URI enteries
 	private final int numDocsToInsert;
-	private final int docSize;
-	private final int maxBatchSize = 1000;
+	private final int maxBatchSize = 100;
 	private final int timeoutMs;
 	private final Map<String, Integer> failed = new HashMap<>();
-	private final int startRecord;          // Starting insert record number
 	private final DocType docType;
-	private final String jsonPath;
 	private boolean skipDrop;
-	
+
+	private int startRecord;
+
+	private int docSize;
+
 	public enum DocType {
-		random, lorem, json,
+		random, lorem 
 	}
 
-	public LoadThread(int id, List<String> mongoUri, int numDocuments, int docSize, int timeout, 
-			int startRecord, int endRecord, DocType doctype, String jsonPath, boolean skipDrop) {
+	public LoadThread(int id, List<String> mongoUri, int docSize, int timeout, 
+			int startRecord, int endRecord, DocType doctype, boolean skipDrop) {
 		this.id = id;
 		this.mongoUri = mongoUri;
-		this.docSize = docSize;
 		this.timeoutMs = timeout * 1000;
-		this.startRecord = startRecord;
 		this.numDocsToInsert = endRecord - startRecord + 1;
 		this.docType = doctype;
-		this.jsonPath = jsonPath;
 		this.skipDrop = skipDrop;
+		this.startRecord = startRecord;
+		this.docSize = docSize;
 	}
 
 	@Override
 	public void run() {
-		log.info("Thread {} loading {} docs into {} instances", id, numDocsToInsert, mongoUri.size());
+		log.info("Thread {} loading {} docs into {} instances with Ids {} to {}", id, numDocsToInsert, mongoUri.size(), startRecord, startRecord + numDocsToInsert-1);
 		for (int i = 0; i < mongoUri.size(); i++) {
 			String uri = mongoUri.get(i);
 			log.info("Thread {} connnecting to database URI {}", id, uri);
@@ -79,7 +75,9 @@ public class LoadThread implements Runnable {
 			List<String> host = MongoURI.host;
 			boolean sslEnabled = MongoURI.isSSLEnabled;
 
-			int count = 0, currentBatchSize;
+			int count = 0;
+			int currentBatchSize = 0;
+
 			final MongoClientOptions ops = MongoClientOptions.builder()
 					.maxWaitTime(timeoutMs)
 					.connectTimeout(timeoutMs)
@@ -106,38 +104,24 @@ public class LoadThread implements Runnable {
 			}
 			long startLoad = System.currentTimeMillis();
 			while (count < numDocsToInsert) {
-				currentBatchSize = numDocsToInsert - count > maxBatchSize ? maxBatchSize : numDocsToInsert - count;
-				final Document[] docs = createDocuments(currentBatchSize, count, docType);
-				final MongoCollection<Document> mongoCollection = client.getDatabase(MongoBench.DB_NAME).getCollection(MongoBench.COLLECTION_NAME);
 				try {
-					for(int currentDocument = 0; currentDocument < docs.length; currentDocument++){
-						Object iDToFind = docs[currentDocument].get("_id");
-						if(CheckIfDocumentExists(iDToFind, mongoCollection)){
-							log.info("Document {} already exists in collection, skipping", iDToFind);
-							continue;
-						}
-						mongoCollection.insertOne(docs[currentDocument]);
-						if((int) iDToFind % 10 == 0){
-							log.info("Thread {} Successfully inserted document {}", id, iDToFind);
-						}
-					}
+					currentBatchSize = processBatch(count, client);
+					this.startRecord = this.startRecord + currentBatchSize;
+					count += currentBatchSize;
 				} catch (Exception e) {
-					log.error("Error while inserting {} documents at {}", currentBatchSize, host, e);
-					log.warn("Checking connection to {}", host);
-					boolean connected = false;
-					try {
-						while (!connected) {
-							client.listDatabases();
-							connected = true;
+					while(true){
+						try {
+							log.error("Error while inserting {} documents at {}", currentBatchSize, host, e);
+							log.warn("Thread {} no connection to {}. Reconnecting...", id, host);
+							client.close();
+							client = new MongoClient(cUri);
+							client.getDatabase(MongoBench.DB_NAME).getCollection(MongoBench.COLLECTION_NAME);
 							break;
+						} catch (Exception e2) {
+							continue;	
 						}
-					} catch (Exception ie) {
-						log.error("Thread {} no connection to {}. Reconnecting...", id, host);
-						client.close();
-						client = new MongoClient(cUri);
 					}
 				}
-				count += currentBatchSize;
 			}
 			client.close();
 			long duration = System.currentTimeMillis() - startLoad;
@@ -157,63 +141,28 @@ public class LoadThread implements Runnable {
 		}
 	}
 
+	private int processBatch(int batchSize, MongoClient client) {
+		int currentBatchSize = numDocsToInsert - batchSize > maxBatchSize ? maxBatchSize : numDocsToInsert - batchSize;
+		final Document[] docs = DataGeneration.createDocuments(currentBatchSize, docType, startRecord, docSize);
+		final MongoCollection<Document> mongoCollection = client.getDatabase(MongoBench.DB_NAME).getCollection(MongoBench.COLLECTION_NAME);
+		for(int currentDocument = 0; currentDocument < docs.length; currentDocument++){
+			Object iDToFind = docs[currentDocument].get("_id");
+			if(CheckIfDocumentExists(iDToFind, mongoCollection)){
+				log.info("Document {} already exists in collection, skipping", iDToFind);
+				continue;
+			}
+			mongoCollection.insertOne(docs[currentDocument]);
+			if((int) iDToFind % 10 == 0){
+				log.info("Thread {} Successfully inserted document {}", id, iDToFind);
+			}
+		}
+		return currentBatchSize;
+	}
+
 	private boolean CheckIfDocumentExists(Object iDToFind , MongoCollection<Document> mongoCollection) {
 		FindIterable<Document> find = mongoCollection.find(new Document("_id",iDToFind));
 		return find.first() != null;
 	}
 
-	Document[] createDocuments(int count, int offset, DocType docType) {
-		final Document[] docs = new Document[count];
-
-		if(docType.equals(DocType.json)){
-			for(int i = 0; i < count; i++){
-				log.info("Create Documents from provided JSON Number " + i);
-				docs[i] = generateJsonData();
-			}
-		}
-		else{
-			final String data = generateData(docType);
-			for (int i = 0; i < count; i++) {
-				docs[i] = new Document()
-				.append("_id", i + startRecord + offset)
-				.append("data", data);
-			}	
-		}
-
-		return docs;
-
-	}
-
-	private String generateData(DocType docType) {
-		String data = "";
-		if(docType.equals(DocType.lorem)){
-			log.info("Create Lorem Data");
-			data=generateLoremData();
-		}
-		else{
-			log.info("Create Random Data");
-			data = RandomStringUtils.randomAlphabetic(docSize);
-		}
-		return data;
-	}
-
-	private Document generateJsonData(){
-		JSONParser parser = new JSONParser();
-		Document dbOject = null;
-		try {
-			FileReader jsonReader = new FileReader(jsonPath);
-			String jsonData = parser.parse(jsonReader).toString();
-			dbOject = Document.parse(jsonData);
-		} catch (Exception e){
-			log.error("An Error occured while parsing the JSON data", e);
-			System.exit(0);
-		}
-		return dbOject;
-
-	}
-
-	private String generateLoremData() {
-		String sentence = new LoremIpsum((long)Math.random()).getWords(docSize);
-		return sentence.substring(0,docSize);
-	}
+	
 }
