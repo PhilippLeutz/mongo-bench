@@ -40,21 +40,22 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.ibm.mongo.LoadThread.DocType;
+import com.ibm.mongo.indicies.IndicieGenerator;
+import com.ibm.mongo.indicies.IndiciesRange;
 
 public class MongoBench {
 
-	private static final Logger log = LoggerFactory.getLogger(MongoBench.class);
+	private static final Logger LOG = LoggerFactory.getLogger(MongoBench.class);
 
 	public final static String DB_NAME = "mongo-bench";
 
 	public final static String COLLECTION_NAME = "mongo-bench-documents";
 
-	private final static DecimalFormat decimalFormat = new DecimalFormat("0.0000");
+	private final static DecimalFormat DECIMAL_FORMAT = new DecimalFormat("0.0000");
 
 	private enum Phase {
 		RUN, LOAD
 	}
-
 
 	public static void main(String[] args) {
 		final Options ops = new Options();
@@ -101,7 +102,7 @@ public class MongoBench {
 		LoadThread.DocType docType;
 		int offesetForSlices;
 		int writeRate = 10;
-		IndiciesHelper indiciesHelper;
+		IndicieGenerator indiciesHelper;
 
 		int[] indexLimitsForThreads;
 
@@ -199,7 +200,7 @@ public class MongoBench {
 				if (cli.hasOption('t')) {
 					tmpIP = cli.getOptionValue('t');
 				} else {
-					log.error("Must provide \"t\" option");
+					LOG.error("Must provide \"t\" option");
 				}
 				if (cli.hasOption('e')) {
 					tmpUser = cli.getOptionValue('e');
@@ -283,18 +284,18 @@ public class MongoBench {
 				isQuery = true;
 			}
 
-			log.info("Running phase {}", phase.name());
+			LOG.info("Running phase {}", phase.name());
 
 			if (cli.hasOption('D')){
 				docType = DocType.valueOf(cli.getOptionValue('D'));
 				if (docType == null){
-					log.error("Unable to parse doctype value");
+					LOG.error("Unable to parse doctype value");
 					System.exit(0);
 				}
 			} else {
 				docType = DocType.random;
 			}
-			log.info("Using Data-type {}", docType);
+			LOG.info("Using Data-type {}", docType);
 
 			if (cli.hasOption('x')) { // skip Drop DB
 				skipDrop= true;
@@ -305,14 +306,14 @@ public class MongoBench {
 			indexLimitsForThreads = null;
 			if(cli.hasOption("B")){
 				if(cli.hasOption("b")){
-					log.error("options b and B are exclusive");
+					LOG.error("options b and B are exclusive");
 					throw new ParseException("options b and B are exclusive");
 				} else {
 					String limitsPath = cli.getOptionValue("B");
-					indiciesHelper = new IndiciesHelper(numThreads, limitsPath, numDocuments);
+					indiciesHelper = new IndiciesRange(limitsPath, numDocuments);
 				}
 			} else{
-				indiciesHelper = new IndiciesHelper(numThreads, numDocuments);
+				indiciesHelper = new IndiciesRange(numDocuments);
 			}
 
 			final MongoBench bench = new MongoBench();
@@ -324,13 +325,13 @@ public class MongoBench {
 			}
 
 		} catch (ParseException | IOException e) {
-			log.error("Unable to parse", e);
+			LOG.error("Unable to parse", e);
 		}
 	}
 
 	private void doRunPhase(String[] mongoUri, int numDocuments, int warmup, int duration, int numThreads, 
-			int reportingInterval, float targetRate, String latencyFilePrefix, int timeouts, boolean isQuery, int writeRate, int docSize, DocType docType, IndiciesHelper indiciesHelper) {
-		log.info("Starting {} threads for {} instances", numThreads, mongoUri.length);
+			int reportingInterval, float targetRate, String latencyFilePrefix, int timeouts, boolean isQuery, int writeRate, int docSize, DocType docType, IndicieGenerator indiciesHelper) {
+		LOG.info("Starting {} threads for {} instances", numThreads, mongoUri.length);
 		final Map<RunThread, Thread> threads = new HashMap<RunThread, Thread>(numThreads);
 
 		List<List<String>> slices;
@@ -350,7 +351,7 @@ public class MongoBench {
 				Thread.yield();
 			}
 		}
-		log.info("Client threads have been initialized");
+		LOG.info("Client threads have been initialized");
 
 		// run the warmup phase id a warmup greater than 0 has been passed by the user
 		warmup(warmup);
@@ -371,7 +372,7 @@ public class MongoBench {
 			try {
 				Thread.sleep(300);
 			} catch (InterruptedException e) {
-				log.error("Unable to sleep", e);
+				LOG.error("Unable to sleep", e);
 			}
 			currentMillis = System.currentTimeMillis();
 		}
@@ -383,7 +384,7 @@ public class MongoBench {
 			try {
 				t.join();
 			} catch (InterruptedException e) {
-				log.error("Unable to join thread", e);
+				LOG.error("Unable to join thread", e);
 			}
 		}
 
@@ -399,11 +400,11 @@ public class MongoBench {
 		}
 		float rate = (float) (numReads + numInserts + numQueries) * 1000f / (float) elapsed;
 		avgRatePerThread = avgRatePerThread / (float) numThreads;
-		log.info("Read {}, updated {} and queried {} documents in {} secs", 
-				numReads, numInserts, numQueries, decimalFormat.format((float) elapsed / 1000f));
-		log.info("Overall transaction rate: {} transactions/second", decimalFormat.format(rate));
-		log.info("Average transaction rate per thread: {} transactions/second", decimalFormat.format(avgRatePerThread));
-		log.info("Average transaction rate per instance: {} transactions/second", decimalFormat.format(rate / (float) mongoUri.length));
+		LOG.info("Read {}, updated {} and queried {} documents in {} secs", 
+				numReads, numInserts, numQueries, DECIMAL_FORMAT.format((float) elapsed / 1000f));
+		LOG.info("Overall transaction rate: {} transactions/second", DECIMAL_FORMAT.format(rate));
+		LOG.info("Average transaction rate per thread: {} transactions/second", DECIMAL_FORMAT.format(avgRatePerThread));
+		LOG.info("Average transaction rate per instance: {} transactions/second", DECIMAL_FORMAT.format(rate / (float) mongoUri.length));
 		collectAndReportLatencies(threads.keySet(), elapsed);
 
 		// Write the per DB stats to a file
@@ -420,7 +421,7 @@ public class MongoBench {
 			e.printStackTrace();
 		}
 
-		log.info("Find the DB stats in /tmp/per_db_stats.txt file");
+		LOG.info("Find the DB stats in /tmp/per_db_stats.txt file");
 	}
 
 
@@ -428,7 +429,7 @@ public class MongoBench {
 	private void warmup(int warmupInSeconds) {
 		if (warmupInSeconds > 0) {
 			long startWarmup = System.currentTimeMillis();
-			log.info("Warm up for {} seconds", warmupInSeconds);
+			LOG.info("Warm up for {} seconds", warmupInSeconds);
 			while (System.currentTimeMillis() - startWarmup < warmupInSeconds * 1000) {
 				try {
 					Thread.sleep(500);
@@ -436,7 +437,7 @@ public class MongoBench {
 					e.printStackTrace();
 				}
 			}
-			log.info("Warmup finished.");
+			LOG.info("Warmup finished.");
 		}
 	}
 
@@ -478,14 +479,14 @@ public class MongoBench {
 		avgWriteLatency = avgWriteLatency / numInserts;
 		avgQueryLatency = avgQueryLatency / numQueries;
 		tps = (numInserts + numReads + numQueries) * 1000f / (duration);
-		log.info("{} inserts, {} reads, {} queries in {} s, {} requests/sec", numInserts, numReads, numQueries, 
-				decimalFormat.format(duration / 1000f), decimalFormat.format(tps));
-		log.info("Read latency Min/Max/Avg [ms]: {}/{}/{}", decimalFormat.format(minReadLatency / 1000000f),
-				decimalFormat.format(maxReadLatency / 1000000f), decimalFormat.format(avgReadLatency / 1000000f));
-		log.info("Write latency Min/Max/Avg [ms]: {}/{}/{}", decimalFormat.format(minWriteLatency / 1000000f),
-				decimalFormat.format(maxWriteLatency / 1000000f), decimalFormat.format(avgWriteLatency / 1000000f));
-		log.info("Query latency Min/Max/Avg [ms]: {}/{}/{}", decimalFormat.format(minQueryLatency / 1000000f),
-				decimalFormat.format(maxQueryLatency / 1000000f), decimalFormat.format(avgQueryLatency / 1000000f));
+		LOG.info("{} inserts, {} reads, {} queries in {} s, {} requests/sec", numInserts, numReads, numQueries, 
+				DECIMAL_FORMAT.format(duration / 1000f), DECIMAL_FORMAT.format(tps));
+		LOG.info("Read latency Min/Max/Avg [ms]: {}/{}/{}", DECIMAL_FORMAT.format(minReadLatency / 1000000f),
+				DECIMAL_FORMAT.format(maxReadLatency / 1000000f), DECIMAL_FORMAT.format(avgReadLatency / 1000000f));
+		LOG.info("Write latency Min/Max/Avg [ms]: {}/{}/{}", DECIMAL_FORMAT.format(minWriteLatency / 1000000f),
+				DECIMAL_FORMAT.format(maxWriteLatency / 1000000f), DECIMAL_FORMAT.format(avgWriteLatency / 1000000f));
+		LOG.info("Query latency Min/Max/Avg [ms]: {}/{}/{}", DECIMAL_FORMAT.format(minQueryLatency / 1000000f),
+				DECIMAL_FORMAT.format(maxQueryLatency / 1000000f), DECIMAL_FORMAT.format(avgQueryLatency / 1000000f));
 	}
 
 	private static List<List<String>> createSlices(String[] mongoUri, int numThreads) {
@@ -503,7 +504,7 @@ public class MongoBench {
 		}
 		int count = 0;
 		for (List<String> uriTmp : slices) {
-			log.info("Thread {} will connect to {} \n", count++, uriTmp);
+			LOG.info("Thread {} will connect to {}", count++, uriTmp);
 		}
 		return slices;
 	}
@@ -547,7 +548,7 @@ public class MongoBench {
 		}
 
 		for (int currentThread = 0; currentThread < numThreads; currentThread++) {
-			log.info("Thread {} will insert records {} to {}", currentThread, startRecord[currentThread], endRecord[currentThread]);
+			LOG.info("Thread {} will insert records {} to {}", currentThread, startRecord[currentThread], endRecord[currentThread]);
 			LoadThread l = new LoadThread(currentThread, slices.get(currentThread), dockSize, 
 					timeouts, startRecord[currentThread], endRecord[currentThread], docType, skipDrop);
 			threads.put(l, new Thread(l));
@@ -561,7 +562,7 @@ public class MongoBench {
 				try {
 					Thread.sleep(100);
 				} catch (InterruptedException e) {
-					log.error("Error while waiting for thread", e);
+					LOG.error("Error while waiting for thread", e);
 				}
 			}
 		}

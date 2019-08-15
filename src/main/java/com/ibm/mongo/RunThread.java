@@ -32,6 +32,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.ibm.mongo.LoadThread.DocType;
+import com.ibm.mongo.indicies.IndicieGenerator;
 import com.mongodb.BasicDBObject;
 import com.mongodb.MongoClient;
 import com.mongodb.MongoClientOptions;
@@ -172,10 +173,10 @@ public class RunThread implements Runnable {
 	private int writeRate;
 	private DocType docType;
 	private int docSize;
-	private IndiciesHelper indicesHelper;
+	private IndicieGenerator indicesHelper;
 
 	public RunThread(int id, List<String> mongoUri, int numDocuments, float targetRate, 
-			String prefixLatencyFile, int timeout, boolean isQuery, int writeRate, int docSize, DocType docType, IndiciesHelper indicesHelper) {
+			String prefixLatencyFile, int timeout, boolean isQuery, int writeRate, int docSize, DocType docType, IndicieGenerator indicesHelper) {
 		this.id = id;
 		this.mongoUri = mongoUri;
 		this.numDbs = mongoUri.size();

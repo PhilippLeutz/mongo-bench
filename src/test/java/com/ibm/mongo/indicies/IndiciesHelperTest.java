@@ -1,4 +1,4 @@
-package com.ibm.mongo;
+package com.ibm.mongo.indicies;
 
 
 import static org.junit.Assert.assertArrayEquals;
