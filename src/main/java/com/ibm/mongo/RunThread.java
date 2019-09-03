@@ -143,7 +143,6 @@ public class RunThread implements Runnable {
 	private static final Logger log = LoggerFactory.getLogger(RunThread.class);
 	private AtomicBoolean stop = new AtomicBoolean(false);
 	private int id = -1;
-	private int numDocuments = 0;
 	private int numDbs = 0;
 	private int numInserts = 0;
 	private int numReads = 0;
@@ -175,12 +174,11 @@ public class RunThread implements Runnable {
 	private int docSize;
 	private IndicieGenerator indicesHelper;
 
-	public RunThread(int id, List<String> mongoUri, int numDocuments, float targetRate, 
+	public RunThread(int id, List<String> mongoUri, float targetRate, 
 			String prefixLatencyFile, int timeout, boolean isQuery, int writeRate, int docSize, DocType docType, IndicieGenerator indicesHelper) {
 		this.id = id;
 		this.mongoUri = mongoUri;
 		this.numDbs = mongoUri.size();
-		this.numDocuments = numDocuments;
 		this.targetRate = targetRate;
 		this.prefixLatencyFile = prefixLatencyFile;
 		this.timeoutMs = timeout * 1000;

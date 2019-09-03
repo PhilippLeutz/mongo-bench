@@ -78,18 +78,7 @@ public class LoadThread implements Runnable {
 			int count = 0;
 			int currentBatchSize = 0;
 
-			final MongoClientOptions ops = MongoClientOptions.builder()
-					.maxWaitTime(timeoutMs)
-					.connectTimeout(timeoutMs)
-					.socketTimeout(timeoutMs)
-					.heartbeatConnectTimeout(timeoutMs)
-					.serverSelectionTimeout(timeoutMs)
-					.sslEnabled(sslEnabled)
-					.sslInvalidHostNameAllowed(true)
-					.build();
-
-			MongoClientURI cUri = new MongoClientURI(uri, new MongoClientOptions.Builder(ops));
-			MongoClient client = new MongoClient(cUri);
+			MongoClient client = createMongoClient(uri, sslEnabled);
 
 			if(!skipDrop){
 				for (final String name : client.listDatabaseNames()) {
@@ -114,7 +103,7 @@ public class LoadThread implements Runnable {
 							log.error("Error while inserting {} documents at {}", currentBatchSize, host, e);
 							log.warn("Thread {} no connection to {}. Reconnecting...", id, host);
 							client.close();
-							client = new MongoClient(cUri);
+							client = createMongoClient(uri, sslEnabled);
 							client.getDatabase(MongoBench.DB_NAME).getCollection(MongoBench.COLLECTION_NAME);
 							break;
 						} catch (Exception e2) {
@@ -139,6 +128,21 @@ public class LoadThread implements Runnable {
 			log.info("Thread {} finished loading {} documents in {} [{} inserts/sec]", 
 					id, count, host, rate);
 		}
+	}
+
+	private MongoClient createMongoClient(String uri, boolean sslEnabled) {
+		final MongoClientOptions ops = MongoClientOptions.builder()
+				.maxWaitTime(timeoutMs)
+				.connectTimeout(timeoutMs)
+				.socketTimeout(timeoutMs)
+				.heartbeatConnectTimeout(timeoutMs)
+				.serverSelectionTimeout(timeoutMs)
+				.sslEnabled(sslEnabled)
+				.sslInvalidHostNameAllowed(true)
+				.build();
+
+		MongoClientURI cUri = new MongoClientURI(uri, new MongoClientOptions.Builder(ops));
+		return  new MongoClient(cUri);
 	}
 
 	private int processBatch(int batchSize, MongoClient client) {

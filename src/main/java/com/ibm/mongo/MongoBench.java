@@ -41,7 +41,9 @@ import org.slf4j.LoggerFactory;
 
 import com.ibm.mongo.LoadThread.DocType;
 import com.ibm.mongo.indicies.IndicieGenerator;
-import com.ibm.mongo.indicies.IndiciesRange;
+import com.ibm.mongo.indicies.EqualDistribution;
+import com.ibm.mongo.indicies.IndiciesHelperFactory;
+import com.ibm.mongo.indicies.IndiciesHelperFactory.HelperType;
 
 public class MongoBench {
 
@@ -82,7 +84,9 @@ public class MongoBench {
 		ops.addOption("D", "document-type", true, "Document Type, either random (default, lorem (text-like data), or json (reads file from json-path)");
 		ops.addOption("h", "help", false, "Show this help dialog");
 		ops.addOption("x", "skip-drop", false, "Skip database cleaning, when it already exists");
-		ops.addOption("B", true, "Use a List of offsets for different threads");
+		ops.addOption("B", true, "Path to the indices of the database beeing queried");
+		ops.addOption("T", true, IndiciesHelperFactory.printHelp());
+		
 		final CommandLineParser parser = new DefaultParser();
 		final Phase phase;
 		final int[] ports;
@@ -104,18 +108,23 @@ public class MongoBench {
 		int writeRate = 10;
 		IndicieGenerator indiciesHelper;
 
-		int[] indexLimitsForThreads;
-
-
 		try {
 			final CommandLine cli = parser.parse(ops, args);
 			if (cli.hasOption('h')) {
 				showHelp(ops);
 				return;
 			}
+			
+			if (cli.hasOption('c')) {   // Number of documents/records
+				numDocuments = Integer.parseInt(cli.getOptionValue('c'));
+			} else {
+				numDocuments = 1000;
+			}
+			
 			if (cli.hasOption('l')) {
 				if (cli.getOptionValue('l').equalsIgnoreCase("load")) {
 					phase = Phase.LOAD;
+
 				} else if (cli.getOptionValue('l').equalsIgnoreCase("run")) {
 					phase = Phase.RUN;
 				} else {
@@ -152,6 +161,19 @@ public class MongoBench {
 				}
 			}
 
+			if(cli.hasOption("T")){
+				HelperType helperType = IndiciesHelperFactory.HelperType.valueOf(cli.getOptionValue("T"));
+				if(cli.hasOption("B")){
+					indiciesHelper = IndiciesHelperFactory.createIndiciesWithIndexLimits(cli.getOptionValue("B"), helperType);
+				} else{
+					indiciesHelper = IndiciesHelperFactory.createIndices(helperType, numDocuments);
+				}
+				
+			} else{
+				LOG.info("No indicies type specified, using Equal distribution");
+				indiciesHelper = new EqualDistribution(numDocuments);
+			}
+			
 			if (cli.hasOption('u')) { // SSL
 				sslEnabled = true;
 			} else {
@@ -250,11 +272,6 @@ public class MongoBench {
 			} else {
 				reportingInterval = 60;
 			}
-			if (cli.hasOption('c')) {   // Number of documents/records
-				numDocuments = Integer.parseInt(cli.getOptionValue('c'));
-			} else {
-				numDocuments = 1000;
-			}
 			if (cli.hasOption('s')) {   // Size of documents
 				documentSize = Integer.parseInt(cli.getOptionValue('s'));
 			} else {
@@ -303,24 +320,12 @@ public class MongoBench {
 				skipDrop = false;
 			}
 
-			indexLimitsForThreads = null;
-			if(cli.hasOption("B")){
-				if(cli.hasOption("b")){
-					LOG.error("options b and B are exclusive");
-					throw new ParseException("options b and B are exclusive");
-				} else {
-					String limitsPath = cli.getOptionValue("B");
-					indiciesHelper = new IndiciesRange(limitsPath, numDocuments);
-				}
-			} else{
-				indiciesHelper = new IndiciesRange(numDocuments);
-			}
-
+			
 			final MongoBench bench = new MongoBench();
 			if (phase == Phase.LOAD) {
 				bench.doLoadPhase(mongoUri, numThreads, numDocuments, documentSize, timeouts, docType, skipDrop, offesetForSlices);
 			} else {
-				bench.doRunPhase(mongoUri, numDocuments, warmup, duration, numThreads, reportingInterval, 
+				bench.doRunPhase(mongoUri, warmup, duration, numThreads, reportingInterval, 
 						rateLimit, latencyFilePrefix, timeouts, isQuery, writeRate, documentSize, docType, indiciesHelper);
 			}
 
@@ -329,16 +334,16 @@ public class MongoBench {
 		}
 	}
 
-	private void doRunPhase(String[] mongoUri, int numDocuments, int warmup, int duration, int numThreads, 
+	private void doRunPhase(String[] mongoUri, int warmup, int duration, int numThreads, 
 			int reportingInterval, float targetRate, String latencyFilePrefix, int timeouts, boolean isQuery, int writeRate, int docSize, DocType docType, IndicieGenerator indiciesHelper) {
 		LOG.info("Starting {} threads for {} instances", numThreads, mongoUri.length);
 		final Map<RunThread, Thread> threads = new HashMap<RunThread, Thread>(numThreads);
 
 		List<List<String>> slices;
 		slices = createSlices(mongoUri, numThreads);
-		
+
 		for (int i = 0; i < numThreads; i++) {
-			RunThread t = new RunThread(i, slices.get(i), numDocuments, targetRate / (float) numThreads, 
+			RunThread t = new RunThread(i, slices.get(i), targetRate / (float) numThreads, 
 					latencyFilePrefix, timeouts, isQuery, writeRate, docSize, docType, indiciesHelper);
 			threads.put(t, new Thread(t));
 		}
@@ -534,7 +539,7 @@ public class MongoBench {
 		final List<List<String>> slices = createSlices(mongoUri, numThreads);
 
 		// If there are multiple threads going to write to the same database,
-		// then we need to distirubte the records among the threads for
+		// then we need to distribute the records among the threads for
 		// inserting into the database
 		int[] startRecord = new int[numThreads];
 		int[] endRecord = new int[numThreads];
@@ -543,7 +548,7 @@ public class MongoBench {
 			determinStartAndEndIndices(mongoUri, numDocuments, insertOffset,
 					slices, startRecord, endRecord);
 		} else {    // more DBs than threads
-			Arrays.fill(startRecord, 0);
+			Arrays.fill(startRecord, 0+insertOffset);
 			Arrays.fill(endRecord, numDocuments-1);
 		}
 
