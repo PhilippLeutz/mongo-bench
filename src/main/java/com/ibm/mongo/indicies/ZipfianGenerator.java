@@ -13,6 +13,8 @@
  * implied. See the License for the specific language governing
  * permissions and limitations under the License. See accompanying
  * LICENSE file.
+ *
+ * Modified by Philipp Leutz
  */
 
 package com.ibm.mongo.indicies;
