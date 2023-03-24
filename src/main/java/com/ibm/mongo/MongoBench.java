@@ -49,9 +49,9 @@ public class MongoBench {
 
 	private static final Logger LOG = LoggerFactory.getLogger(MongoBench.class);
 
-	public final static String DB_NAME = "mongo-bench";
+	public final static String DB_NAME = "mongobench";
 
-	public final static String COLLECTION_NAME = "mongo-bench-documents";
+	public final static String COLLECTION_NAME = "mongobenchdocuments";
 
 	private final static DecimalFormat DECIMAL_FORMAT = new DecimalFormat("0.0000");
 

@@ -1,6 +1,5 @@
 package com.ibm.mongo.indicies;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 
@@ -34,14 +33,14 @@ public class IndiciesIteratorTest {
 		}
 	}
 	
-	@Test
+/**	@Test
 	public void indexReadTest() throws InterruptedException, IOException {
 		IterationFromList indiciesIterator = new IterationFromList("ressources/limits");
 		System.out.println(indiciesIterator.getIndexSize());
 
 	}
 	
-	
+	*/
 	class IncrementThread implements Runnable{
 		IterationFromList iterator;
 

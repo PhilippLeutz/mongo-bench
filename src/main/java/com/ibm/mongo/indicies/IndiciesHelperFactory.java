@@ -13,7 +13,7 @@ public class IndiciesHelperFactory {
 
 
 	public enum HelperType{
-		equaldistribution, iterator;
+		equaldistribution, iterator, zipfian;
 	}
 
 	public static IndicieGenerator createIndiciesWithIndexLimits(String path, HelperType type) throws IOException, ParseException{
@@ -24,6 +24,7 @@ public class IndiciesHelperFactory {
 		case iterator:
 			log.info("Use Index generator of Type " + type);
 			return new IterationFromList(path);
+		
 		default:
 			break;
 		}
@@ -38,12 +39,15 @@ public class IndiciesHelperFactory {
 		case iterator:
 			log.info("Use Index generator of Type " + HelperType.equaldistribution + "");
 			return new Iteration(numberOfDocuments);
+		case zipfian:
+			log.info("Use Index generator of Type " + HelperType.zipfian + "");
+			return new ZipfianGenerator(numberOfDocuments);
 		default:
 			throw new ParseException("Helper Type " + type  + " not available");
 		}
 	}
 	
 	public static String printHelp(){
-		return "Can be '" + HelperType.iterator + "', iterating over all valid indices or '" + HelperType.iterator+ "' choosing indicies randomly and equal distributed. ";
+		return "Can be '" + HelperType.iterator + "', iterating over all valid indices or '" + HelperType.equaldistribution+ "' choosing indicies randomly and equal distributed. " + HelperType.zipfian +"'Creating a zipfian distributio over indices'";
 	}
 }

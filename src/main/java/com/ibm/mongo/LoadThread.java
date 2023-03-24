@@ -80,7 +80,7 @@ public class LoadThread implements Runnable {
 
 			MongoClient client = createMongoClient(uri, sslEnabled);
 
-			if(!skipDrop){
+			if((!skipDrop) && (startRecord == 0)){
 				for (final String name : client.listDatabaseNames()) {
 					if (name.equalsIgnoreCase(MongoBench.DB_NAME)) {
 						log.warn("Database {} exists and will be purged before inserting", MongoBench.DB_NAME);
